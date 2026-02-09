@@ -34,9 +34,11 @@ export function UserManagement() {
   const [formData, setFormData] = useState({
     email: '',
     name: '',
+    password: '',
     role: 'STAFF',
     departmentId: '',
   })
+  const [createdUserPassword, setCreatedUserPassword] = useState<string | null>(null)
 
   useEffect(() => {
     fetchUsers()
@@ -81,6 +83,12 @@ export function UserManagement() {
 
     if (!formData.name.trim()) {
       errors.name = 'Name is required'
+    }
+
+    if (!formData.password.trim()) {
+      errors.password = 'Password is required'
+    } else if (formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters'
     }
 
     if (!formData.departmentId) {
@@ -137,10 +145,12 @@ export function UserManagement() {
         throw new Error(data.error || 'Failed to create user')
       }
 
-      setSuccess('User created successfully')
+      setSuccess(`User created successfully! Password: ${formData.password}`)
+      setCreatedUserPassword(formData.password)
       setFormData({
         email: '',
         name: '',
+        password: '',
         role: 'STAFF',
         departmentId: '',
       })
@@ -214,6 +224,7 @@ export function UserManagement() {
     setFormData({
       email: '',
       name: '',
+      password: '',
       role: 'STAFF',
       departmentId: '',
     })
@@ -275,9 +286,24 @@ export function UserManagement() {
       )}
 
       {success && (
-        <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          <p className="text-sm text-green-700">{success}</p>
+        <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+          <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-green-700 font-medium">{success}</p>
+            {createdUserPassword && (
+              <div className="mt-3 p-3 bg-white border border-green-300 rounded text-sm">
+                <p className="text-gray-700 mb-2">
+                  <strong>Share this password with the user:</strong>
+                </p>
+                <code className="block bg-gray-100 p-2 rounded font-mono text-xs break-all">
+                  {createdUserPassword}
+                </code>
+                <p className="text-gray-600 text-xs mt-2">
+                  The user should change this password after first login.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -329,6 +355,28 @@ export function UserManagement() {
                   <p className="text-sm text-red-600 mt-1">{validationErrors.name}</p>
                 )}
               </div>
+
+              {!editingUser && (
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                    Password *
+                  </label>
+                  <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      validationErrors.password ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Minimum 8 characters"
+                  />
+                  {validationErrors.password && (
+                    <p className="text-sm text-red-600 mt-1">{validationErrors.password}</p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
