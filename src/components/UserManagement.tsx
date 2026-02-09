@@ -194,6 +194,7 @@ export function UserManagement() {
       setFormData({
         email: '',
         name: '',
+        password: '',
         role: 'STAFF',
         departmentId: '',
       })
