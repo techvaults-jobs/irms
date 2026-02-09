@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { AlertCircle, CheckCircle, Trash2, Edit2, Plus } from 'lucide-react'
+import { ConfirmationModal } from './ConfirmationModal'
 
 interface User {
   id: string
@@ -30,6 +31,14 @@ export function UserManagement() {
   const [showForm, setShowForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean
+    userId?: string
+    userName?: string
+  }>({
+    isOpen: false,
+  })
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const [formData, setFormData] = useState({
     email: '',
@@ -120,6 +129,7 @@ export function UserManagement() {
     setFormData({
       email: user.email,
       name: user.name,
+      password: '',
       role: user.role,
       departmentId: user.departmentId,
     })
@@ -195,14 +205,23 @@ export function UserManagement() {
     }
   }
 
-  const handleDeactivateUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to deactivate this user?')) return
+  const handleDeactivateUser = (userId: string, userName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      userId,
+      userName,
+    })
+  }
 
+  const handleConfirmDelete = async () => {
+    if (!confirmModal.userId) return
+
+    setIsDeleting(true)
     setError(null)
     setSuccess(null)
 
     try {
-      const response = await fetch(`/api/users/${userId}`, {
+      const response = await fetch(`/api/users/${confirmModal.userId}`, {
         method: 'DELETE',
       })
 
@@ -212,10 +231,17 @@ export function UserManagement() {
       }
 
       setSuccess('User deactivated successfully')
+      setConfirmModal({ isOpen: false })
       fetchUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsDeleting(false)
     }
+  }
+
+  const handleCancelDelete = () => {
+    setConfirmModal({ isOpen: false })
   }
 
   const handleCancel = () => {
@@ -496,7 +522,7 @@ export function UserManagement() {
                         </button>
                         {user.isActive && (
                           <button
-                            onClick={() => handleDeactivateUser(user.id)}
+                            onClick={() => handleDeactivateUser(user.id, user.name)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Deactivate user"
                           >
@@ -526,6 +552,20 @@ export function UserManagement() {
           <strong>User Roles:</strong> Staff can create requisitions, Managers approve requisitions, Finance records payments, and Admins manage users and configuration.
         </p>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        title="Deactivate User"
+        message={`Are you sure you want to deactivate ${confirmModal.userName}?`}
+        description="This user will no longer be able to access the system. You can reactivate them later if needed."
+        type="danger"
+        confirmText="Deactivate"
+        cancelText="Cancel"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }

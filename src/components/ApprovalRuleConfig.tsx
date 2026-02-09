@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { AlertCircle, CheckCircle, Trash2, Edit2, Plus } from 'lucide-react'
+import { ConfirmationModal } from './ConfirmationModal'
 
 interface ApprovalRule {
   id: string
@@ -33,6 +34,13 @@ export function ApprovalRuleConfig() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean
+    ruleId?: string
+  }>({
+    isOpen: false,
+  })
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const [formData, setFormData] = useState({
     minAmount: '',
@@ -189,11 +197,20 @@ export function ApprovalRuleConfig() {
     setShowForm(true)
   }
 
-  const handleDelete = async (ruleId: string) => {
-    if (!confirm('Are you sure you want to delete this approval rule?')) return
+  const handleDelete = (ruleId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      ruleId,
+    })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!confirmModal.ruleId) return
+
+    setIsDeleting(true)
 
     try {
-      const response = await fetch(`/api/approval-rules/${ruleId}`, {
+      const response = await fetch(`/api/approval-rules/${confirmModal.ruleId}`, {
         method: 'DELETE',
       })
 
@@ -202,11 +219,18 @@ export function ApprovalRuleConfig() {
       }
 
       setSuccess(true)
+      setConfirmModal({ isOpen: false })
       await fetchRules()
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsDeleting(false)
     }
+  }
+
+  const handleCancelDelete = () => {
+    setConfirmModal({ isOpen: false })
   }
 
   const handleCancel = () => {
@@ -432,6 +456,20 @@ export function ApprovalRuleConfig() {
           ))}
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        title="Delete Approval Rule"
+        message="Are you sure you want to delete this approval rule?"
+        description="This action cannot be undone. The rule will be permanently removed from the system."
+        type="danger"
+        confirmText="Delete"
+        cancelText="Cancel"
+        isLoading={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }

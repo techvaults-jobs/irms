@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { AlertCircle, Download, FileText, Trash2 } from 'lucide-react'
+import { ConfirmationModal } from './ConfirmationModal'
 
 interface Attachment {
   id: string
@@ -30,6 +31,13 @@ export function AttachmentList({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean
+    attachmentId?: string
+    fileName?: string
+  }>({
+    isOpen: false,
+  })
 
   useEffect(() => {
     fetchAttachments()
@@ -75,26 +83,39 @@ export function AttachmentList({
     }
   }
 
-  const handleDelete = async (attachmentId: string) => {
-    if (!confirm('Are you sure you want to delete this attachment?')) return
+  const handleDelete = (attachmentId: string, fileName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      attachmentId,
+      fileName,
+    })
+  }
 
-    setIsDeleting(attachmentId)
+  const handleConfirmDelete = async () => {
+    if (!confirmModal.attachmentId) return
+
+    setIsDeleting(confirmModal.attachmentId)
 
     try {
       const response = await fetch(
-        `/api/requisitions/${requisitionId}/attachments/${attachmentId}`,
+        `/api/requisitions/${requisitionId}/attachments/${confirmModal.attachmentId}`,
         { method: 'DELETE' }
       )
       if (!response.ok) {
         throw new Error('Failed to delete attachment')
       }
-      setAttachments(prev => prev.filter(a => a.id !== attachmentId))
+      setAttachments(prev => prev.filter(a => a.id !== confirmModal.attachmentId))
+      setConfirmModal({ isOpen: false })
       onAttachmentDeleted?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete attachment')
     } finally {
       setIsDeleting(null)
     }
+  }
+
+  const handleCancelDelete = () => {
+    setConfirmModal({ isOpen: false })
   }
 
   const formatFileSize = (bytes: number) => {
@@ -187,7 +208,7 @@ export function AttachmentList({
             </button>
             {canDelete && (
               <button
-                onClick={() => handleDelete(attachment.id)}
+                onClick={() => handleDelete(attachment.id, attachment.fileName)}
                 disabled={isDeleting === attachment.id}
                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                 title="Delete attachment"
@@ -205,6 +226,20 @@ export function AttachmentList({
           <strong>Total attachments:</strong> {attachments.length}
         </p>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        title="Delete Attachment"
+        message={`Are you sure you want to delete "${confirmModal.fileName}"?`}
+        description="This action cannot be undone. The attachment will be permanently removed."
+        type="danger"
+        confirmText="Delete"
+        cancelText="Cancel"
+        isLoading={isDeleting === confirmModal.attachmentId}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }
