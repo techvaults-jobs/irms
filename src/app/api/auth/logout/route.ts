@@ -3,9 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
-    // Sign out the user
-    await signOut({ redirect: false })
-
     // Create response with cache-busting headers
     const response = NextResponse.json(
       { success: true, message: 'Logged out successfully' },
@@ -18,7 +15,7 @@ export async function POST(req: NextRequest) {
     response.headers.set('Expires', '0')
     response.headers.set('Surrogate-Control', 'no-store')
 
-    // Clear session cookie
+    // Clear session cookie - NextAuth uses next-auth.session-token
     response.cookies.set('next-auth.session-token', '', {
       maxAge: 0,
       path: '/',
@@ -38,6 +35,15 @@ export async function POST(req: NextRequest) {
 
     // Clear callback URL cookie if it exists
     response.cookies.set('next-auth.callback-url', '', {
+      maxAge: 0,
+      path: '/',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    })
+
+    // Also try to clear the JWT token cookie
+    response.cookies.set('next-auth.jwt', '', {
       maxAge: 0,
       path: '/',
       httpOnly: true,
