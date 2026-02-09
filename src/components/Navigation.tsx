@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { signOut } from 'next-auth/react'
 import { Menu, X, LogOut, Settings, Home, FileText, CheckCircle, BarChart3, Users, Lock } from 'lucide-react'
+import { useLogout } from '@/hooks/useLogout'
 
 interface NavigationProps {
   userRole: string
@@ -13,11 +12,10 @@ interface NavigationProps {
 
 export function Navigation({ userRole, userName, userEmail }: NavigationProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const router = useRouter()
+  const { logout } = useLogout()
 
   const handleLogout = async () => {
-    await signOut({ redirect: false })
-    router.push('/auth/login')
+    await logout()
   }
 
   const getNavItems = () => {
