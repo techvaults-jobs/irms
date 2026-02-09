@@ -15,41 +15,20 @@ export function useLogout() {
       // Clear all session storage
       sessionStorage.clear()
 
-      // Clear IndexedDB (used by service workers and PWA)
-      if ('indexedDB' in window) {
-        try {
-          const dbs = await indexedDB.databases()
-          dbs.forEach(db => {
-            if (db.name) {
-              indexedDB.deleteDatabase(db.name)
-            }
-          })
-        } catch (e) {
-          console.error('Error clearing IndexedDB:', e)
-        }
-      }
+      // Sign out using NextAuth - this is the primary logout method
+      await signOut({ redirect: false })
 
-      // Clear service worker cache
-      if ('serviceWorker' in navigator) {
-        try {
-          const registrations = await navigator.serviceWorker.getRegistrations()
-          for (const registration of registrations) {
-            await registration.unregister()
-          }
-        } catch (e) {
-          console.error('Error clearing service workers:', e)
-        }
+      // Call logout API endpoint to clear server-side cookies
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+      } catch (e) {
+        console.error('Error calling logout endpoint:', e)
       }
-
-      // Clear all cookies by setting them to expire
-      document.cookie.split(';').forEach(c => {
-        const eqPos = c.indexOf('=')
-        const name = eqPos > -1 ? c.substr(0, eqPos).trim() : c.trim()
-        if (name) {
-          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`
-          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
-        }
-      })
 
       // Clear browser cache if available
       if ('caches' in window) {
@@ -63,19 +42,16 @@ export function useLogout() {
         }
       }
 
-      // Sign out using NextAuth
-      await signOut({ redirect: false })
-
-      // Call logout API endpoint to clear server-side session
-      try {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-      } catch (e) {
-        console.error('Error calling logout endpoint:', e)
+      // Clear service worker cache
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations()
+          for (const registration of registrations) {
+            await registration.unregister()
+          }
+        } catch (e) {
+          console.error('Error clearing service workers:', e)
+        }
       }
 
       // Redirect to login page
