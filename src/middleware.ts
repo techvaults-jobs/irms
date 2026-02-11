@@ -1,8 +1,7 @@
-import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-export async function middleware(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
 
   // Allow static files and public assets
@@ -10,7 +9,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Allow all auth API endpoints without session check
+  // Allow all auth API endpoints
   if (pathname.startsWith('/api/auth')) {
     const response = NextResponse.next()
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
@@ -19,32 +18,26 @@ export async function middleware(req: NextRequest) {
     return response
   }
 
-  // Get session
-  const session = await auth()
-  const isLoggedIn = !!session
-  const isAuthPage = pathname.startsWith('/auth')
-
-  // Redirect logged-in users away from auth pages
-  if (isAuthPage && isLoggedIn) {
-    return NextResponse.redirect(new URL('/dashboard', req.nextUrl))
+  // Allow health and init endpoints
+  if (pathname.startsWith('/api/health') || pathname.startsWith('/api/init')) {
+    return NextResponse.next()
   }
 
-  // Redirect unauthenticated users to login
-  if (!isAuthPage && !isLoggedIn && !pathname.startsWith('/api/health') && !pathname.startsWith('/api/init')) {
-    return NextResponse.redirect(new URL('/auth/login', req.nextUrl))
-  }
-
-  // Add cache control headers
-  const response = NextResponse.next()
-  if (isAuthPage || pathname.startsWith('/auth')) {
+  // Allow auth pages
+  if (pathname.startsWith('/auth')) {
+    const response = NextResponse.next()
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
     response.headers.set('Pragma', 'no-cache')
     response.headers.set('Expires', '0')
-  } else if (isLoggedIn) {
-    response.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
-    response.headers.set('Pragma', 'no-cache')
-    response.headers.set('Expires', '0')
+    return response
   }
+
+  // For all other routes, add cache control headers but don't block
+  // Auth checks will be done in page components and API routes
+  const response = NextResponse.next()
+  response.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
+  response.headers.set('Pragma', 'no-cache')
+  response.headers.set('Expires', '0')
 
   return response
 }
