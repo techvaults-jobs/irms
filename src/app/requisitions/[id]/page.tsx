@@ -1,12 +1,21 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import DashboardLayout from '@/components/DashboardLayout'
 import { RequisitionDetail } from '@/components/RequisitionDetail'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 
 export default function RequisitionDetailPage({ params }: { params: { id: string } }) {
+  return (
+    <AuthGuard>
+      <RequisitionDetailContent params={params} />
+    </AuthGuard>
+  )
+}
+
+function RequisitionDetailContent({ params }: { params: { id: string } }) {
   const { user, isLoading } = useAuth()
 
   return (

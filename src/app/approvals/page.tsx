@@ -1,12 +1,21 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import DashboardLayout from '@/components/DashboardLayout'
 import { ApprovalQueue } from '@/components/ApprovalQueue'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
 export default function ApprovalsPage() {
+  return (
+    <AuthGuard>
+      <ApprovalsContent />
+    </AuthGuard>
+  )
+}
+
+function ApprovalsContent() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
 

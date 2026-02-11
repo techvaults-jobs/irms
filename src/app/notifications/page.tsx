@@ -1,12 +1,21 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import { useNotifications } from '@/hooks/useNotifications'
 import DashboardLayout from '@/components/DashboardLayout'
 import { Bell, Trash2, Check, CheckCheck } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 export default function NotificationsPage() {
+  return (
+    <AuthGuard>
+      <NotificationsContent />
+    </AuthGuard>
+  )
+}
+
+function NotificationsContent() {
   const { isLoading: authLoading } = useAuth()
   const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, deleteNotification } = useNotifications()
 

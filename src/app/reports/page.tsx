@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import DashboardLayout from '@/components/DashboardLayout'
 import { useState, useEffect } from 'react'
 import { BarChart3, Download, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
@@ -15,6 +16,14 @@ interface ReportData {
 }
 
 export default function ReportsPage() {
+  return (
+    <AuthGuard>
+      <ReportsContent />
+    </AuthGuard>
+  )
+}
+
+function ReportsContent() {
   const { isLoading } = useAuth()
   const [reportType, setReportType] = useState('monthly-spending')
   const [startDate, setStartDate] = useState(() => {

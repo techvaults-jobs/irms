@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import EnhancedDashboardLayout from '@/components/EnhancedDashboardLayout'
 import { useEffect, useState } from 'react'
 import { FileText, CheckCircle, Clock, AlertCircle, TrendingUp, Plus } from 'lucide-react'
@@ -21,6 +22,14 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  return (
+    <AuthGuard>
+      <DashboardContent />
+    </AuthGuard>
+  )
+}
+
+function DashboardContent() {
   const { user, isLoading } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)

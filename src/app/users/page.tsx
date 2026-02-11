@@ -1,12 +1,21 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import DashboardLayout from '@/components/DashboardLayout'
 import { UserManagement } from '@/components/UserManagement'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
 export default function UsersPage() {
+  return (
+    <AuthGuard>
+      <UsersContent />
+    </AuthGuard>
+  )
+}
+
+function UsersContent() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
 

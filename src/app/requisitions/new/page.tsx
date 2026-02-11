@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import DashboardLayout from '@/components/DashboardLayout'
 import { RequisitionForm } from '@/components/RequisitionForm'
 import { useRouter } from 'next/navigation'
@@ -9,6 +10,14 @@ import { ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 
 export default function NewRequisitionPage() {
+  return (
+    <AuthGuard>
+      <NewRequisitionContent />
+    </AuthGuard>
+  )
+}
+
+function NewRequisitionContent() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
 

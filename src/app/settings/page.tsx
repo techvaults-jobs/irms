@@ -1,12 +1,21 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { AuthGuard } from '@/components/AuthGuard'
 import EnhancedDashboardLayout from '@/components/EnhancedDashboardLayout'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle, Save } from 'lucide-react'
 
 export default function SettingsPage() {
+  return (
+    <AuthGuard>
+      <SettingsContent />
+    </AuthGuard>
+  )
+}
+
+function SettingsContent() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
   const [isSaving, setIsSaving] = useState(false)
