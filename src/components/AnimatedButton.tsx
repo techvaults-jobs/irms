@@ -6,16 +6,16 @@ import clsx from 'clsx'
 import { ReactNode } from 'react'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center font-medium rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2',
+  'inline-flex items-center justify-center font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2',
   {
     variants: {
       variant: {
-        primary: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700 focus:ring-red-300',
-        secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-300 focus:ring-gray-200',
-        outlined: 'border-2 border-red-500 text-red-500 hover:bg-red-50 active:bg-red-100 focus:ring-red-300',
-        text: 'text-red-500 hover:bg-red-50 active:bg-red-100 focus:ring-red-300',
-        danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 focus:ring-red-300',
-        success: 'bg-green-500 text-white hover:bg-green-600 active:bg-green-700 focus:ring-green-300',
+        primary: 'bg-brand-primary text-white hover:opacity-90 active:opacity-80 focus:ring-brand-primary shadow-md hover:shadow-lg',
+        secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-300 focus:ring-gray-400 shadow-sm hover:shadow-md',
+        outlined: 'border-2 border-brand-primary text-brand-primary hover:bg-red-50 active:bg-red-100 focus:ring-brand-primary',
+        text: 'text-brand-primary hover:bg-red-50 active:bg-red-100 focus:ring-brand-primary',
+        danger: 'bg-error-600 text-white hover:bg-error-700 active:bg-error-800 focus:ring-error-500 shadow-md hover:shadow-lg',
+        success: 'bg-success-600 text-white hover:bg-success-700 active:bg-success-800 focus:ring-success-500 shadow-md hover:shadow-lg',
       },
       size: {
         sm: 'px-3 py-2 text-sm',

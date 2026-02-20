@@ -22,15 +22,15 @@ function NotificationsContent() {
   const getNotificationColor = (type: string) => {
     switch (type) {
       case 'SUBMITTED':
-        return 'border-l-blue-500 bg-blue-50'
+        return 'border-l-info-500 bg-info-50'
       case 'APPROVED':
-        return 'border-l-green-500 bg-green-50'
+        return 'border-l-success-500 bg-success-50'
       case 'REJECTED':
-        return 'border-l-red-500 bg-red-50'
+        return 'border-l-error-500 bg-error-50'
       case 'PAID':
         return 'border-l-purple-500 bg-purple-50'
       case 'REMINDER':
-        return 'border-l-yellow-500 bg-yellow-50'
+        return 'border-l-warning-500 bg-warning-50'
       default:
         return 'border-l-gray-500 bg-gray-50'
     }
@@ -162,12 +162,12 @@ function NotificationsContent() {
                     </p>
                     <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
                       notification.requisition.status === 'APPROVED'
-                        ? 'bg-green-100 text-green-800'
+                        ? 'bg-success-100 text-success-800'
                         : notification.requisition.status === 'REJECTED'
-                        ? 'bg-red-100 text-red-800'
+                        ? 'bg-error-100 text-error-800'
                         : notification.requisition.status === 'PAID'
                         ? 'bg-purple-100 text-purple-800'
-                        : 'bg-blue-100 text-blue-800'
+                        : 'bg-info-100 text-info-800'
                     }`}>
                       {notification.requisition.status}
                     </span>

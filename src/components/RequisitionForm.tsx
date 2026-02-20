@@ -369,7 +369,7 @@ export function RequisitionForm({ initialData, isEditing = false }: RequisitionF
           type="button"
           onClick={handleSubmit}
           disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-6 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:opacity-90 active:opacity-80 disabled:opacity-50 transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
         >
           {isLoading ? 'Submitting...' : 'Submit Requisition'}
         </button>

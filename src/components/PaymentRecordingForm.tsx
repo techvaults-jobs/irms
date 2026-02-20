@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { AlertCircle, CheckCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { AlertCircle, CheckCircle, Copy, RefreshCw } from 'lucide-react'
 import { Decimal } from '@prisma/client/runtime/library'
 import { formatCurrency } from '@/lib/utils'
+import { PaymentReferenceGenerator } from '@/lib/payment-reference-generator'
 
 interface PaymentRecordingFormProps {
   requisitionId: string
@@ -28,7 +29,7 @@ export function PaymentRecordingForm({
     actualCostPaid: '',
     paymentDate: new Date().toISOString().split('T')[0],
     paymentMethod: 'Bank Transfer',
-    paymentReference: '',
+    paymentReference: PaymentReferenceGenerator.generate(),
     paymentComment: '',
   })
 
@@ -55,9 +56,7 @@ export function PaymentRecordingForm({
       errors.paymentMethod = 'Payment method is required'
     }
 
-    if (!formData.paymentReference.trim()) {
-      errors.paymentReference = 'Payment reference is required'
-    }
+    // Payment reference is auto-generated, so no validation needed
 
     if (exceedsThreshold && !formData.paymentComment.trim()) {
       errors.paymentComment = 'Comment is required when payment exceeds approved cost by more than 10%'
@@ -133,23 +132,23 @@ export function PaymentRecordingForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
       {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="flex items-center gap-2 p-4 bg-error-50 border border-error-200 rounded-xl">
+          <AlertCircle className="w-5 h-5 text-error-600 flex-shrink-0" />
+          <p className="text-sm text-error-700 font-medium">{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          <p className="text-sm text-green-700">Payment recorded successfully!</p>
+        <div className="flex items-center gap-2 p-4 bg-success-50 border border-success-200 rounded-xl">
+          <CheckCircle className="w-5 h-5 text-success-600 flex-shrink-0" />
+          <p className="text-sm text-success-700 font-medium">Payment recorded successfully!</p>
         </div>
       )}
 
       {/* Approved Cost Display */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-blue-900">Approved Cost</p>
-        <p className="text-2xl font-bold text-blue-600 mt-1">{formatCurrency(approvedCostNum)}</p>
+      <div className="bg-brand-primary bg-opacity-5 border border-brand-primary border-opacity-20 rounded-xl p-4">
+        <p className="text-sm font-medium text-gray-700">Approved Cost</p>
+        <p className="text-2xl font-bold text-brand-primary mt-1">{formatCurrency(approvedCostNum)}</p>
       </div>
 
       {/* Actual Cost Paid */}
@@ -165,13 +164,13 @@ export function PaymentRecordingForm({
           onChange={handleInputChange}
           step="0.01"
           min="0"
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.actualCostPaid ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
+            validationErrors.actualCostPaid ? 'border-error-500' : 'border-gray-300'
           }`}
           placeholder="0.00"
         />
         {validationErrors.actualCostPaid && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.actualCostPaid}</p>
+          <p className="text-sm text-error-600 mt-1">{validationErrors.actualCostPaid}</p>
         )}
         {formData.actualCostPaid && (
           <div className="mt-2 text-sm">
@@ -198,12 +197,12 @@ export function PaymentRecordingForm({
           name="paymentDate"
           value={formData.paymentDate}
           onChange={handleInputChange}
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
+            validationErrors.paymentDate ? 'border-error-500' : 'border-gray-300'
           }`}
         />
         {validationErrors.paymentDate && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.paymentDate}</p>
+          <p className="text-sm text-error-600 mt-1">{validationErrors.paymentDate}</p>
         )}
       </div>
 
@@ -217,8 +216,8 @@ export function PaymentRecordingForm({
           name="paymentMethod"
           value={formData.paymentMethod}
           onChange={handleInputChange}
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
+            validationErrors.paymentMethod ? 'border-error-500' : 'border-gray-300'
           }`}
         >
           <option value="Bank Transfer">Bank Transfer</option>
@@ -229,29 +228,48 @@ export function PaymentRecordingForm({
           <option value="Other">Other</option>
         </select>
         {validationErrors.paymentMethod && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.paymentMethod}</p>
+          <p className="text-sm text-error-600 mt-1">{validationErrors.paymentMethod}</p>
         )}
       </div>
 
       {/* Payment Reference */}
       <div>
         <label htmlFor="paymentReference" className="block text-sm font-medium text-gray-700 mb-1">
-          Payment Reference *
+          Payment Reference <span className="text-xs text-gray-500">(Auto-generated)</span>
         </label>
-        <input
-          type="text"
-          id="paymentReference"
-          name="paymentReference"
-          value={formData.paymentReference}
-          onChange={handleInputChange}
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.paymentReference ? 'border-red-500' : 'border-gray-300'
-          }`}
-          placeholder="e.g., TXN-12345 or Check #789"
-        />
-        {validationErrors.paymentReference && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.paymentReference}</p>
-        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            id="paymentReference"
+            name="paymentReference"
+            value={formData.paymentReference}
+            onChange={handleInputChange}
+            readOnly
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const newRef = PaymentReferenceGenerator.generate()
+              setFormData(prev => ({ ...prev, paymentReference: newRef }))
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            title="Generate new reference"
+          >
+            <RefreshCw className="w-4 h-4 text-gray-600" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(formData.paymentReference)
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            title="Copy reference"
+          >
+            <Copy className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">A unique payment reference is automatically generated for each payment</p>
       </div>
 
       {/* Payment Comment */}
@@ -265,8 +283,8 @@ export function PaymentRecordingForm({
           value={formData.paymentComment}
           onChange={handleInputChange}
           rows={3}
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.paymentComment ? 'border-red-500' : 'border-gray-300'
+          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
+            validationErrors.paymentComment ? 'border-error-500' : 'border-gray-300'
           }`}
           placeholder={
             exceedsThreshold
@@ -275,7 +293,7 @@ export function PaymentRecordingForm({
           }
         />
         {validationErrors.paymentComment && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.paymentComment}</p>
+          <p className="text-sm text-error-600 mt-1">{validationErrors.paymentComment}</p>
         )}
       </div>
 
@@ -284,7 +302,7 @@ export function PaymentRecordingForm({
         <button
           type="submit"
           disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="px-6 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:opacity-90 active:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
         >
           {isLoading ? 'Recording Payment...' : 'Record Payment'}
         </button>

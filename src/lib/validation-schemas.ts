@@ -115,9 +115,9 @@ export const paymentRecordingSchema = z.object({
     .max(100, 'Payment method must be 100 characters or less')
     .transform(sanitizeString),
   paymentReference: z.string()
-    .min(1, 'Payment reference is required')
     .max(255, 'Payment reference must be 255 characters or less')
-    .transform(sanitizeString),
+    .optional()
+    .transform(val => val ? sanitizeString(val) : val), // Optional - will be auto-generated if not provided
   paymentComment: z.string()
     .max(5000, 'Payment comment must be 5000 characters or less')
     .optional()

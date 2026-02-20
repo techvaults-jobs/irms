@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 import { AuditTrailService } from './audit-trail.service'
 import { ReferentialIntegrityChecker } from '@/lib/referential-integrity'
+import { PaymentReferenceGenerator } from '@/lib/payment-reference-generator'
 import { z } from 'zod'
 
 export const paymentRecordingSchema = z.object({
@@ -11,7 +12,7 @@ export const paymentRecordingSchema = z.object({
   }, 'Actual cost paid must be greater than 0'),
   paymentDate: z.date().or(z.string().transform(val => new Date(val))),
   paymentMethod: z.string().min(1).max(100),
-  paymentReference: z.string().min(1).max(255),
+  paymentReference: z.string().min(1).max(255).optional(), // Optional - will be auto-generated if not provided
   paymentComment: z.string().optional(),
 })
 
@@ -117,9 +118,7 @@ export class FinancialTrackingService {
       throw new Error('Payment method is required')
     }
 
-    if (!validated.paymentReference) {
-      throw new Error('Payment reference is required')
-    }
+    // Payment reference will be auto-generated if not provided
   }
 
   /**
@@ -197,6 +196,9 @@ export class FinancialTrackingService {
       )
     }
 
+    // Auto-generate payment reference if not provided
+    const paymentReference = data.paymentReference || PaymentReferenceGenerator.generate()
+
     // Record payment in database
     const updated = await prisma.requisition.update({
       where: { id: requisitionId },
@@ -204,7 +206,7 @@ export class FinancialTrackingService {
         actualCostPaid,
         paymentDate,
         paymentMethod: data.paymentMethod,
-        paymentReference: data.paymentReference,
+        paymentReference,
         paymentComment: data.paymentComment || null,
         status: 'PAID',
       },
@@ -219,7 +221,7 @@ export class FinancialTrackingService {
           actualCostPaid: actualCostPaid.toString(),
           paymentDate: paymentDate.toISOString(),
           paymentMethod: data.paymentMethod,
-          paymentReference: data.paymentReference,
+          paymentReference,
           paymentComment: data.paymentComment,
           approvedCost: requisition.approvedCost.toString(),
           variance: validation.variance,

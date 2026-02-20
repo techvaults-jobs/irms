@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, AlertCircle, FileText, Download } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { ApprovalActions } from './ApprovalActions'
 
 interface Attachment {
   id: string
@@ -46,7 +47,7 @@ interface Requisition {
 }
 
 const URGENCY_COLORS: Record<string, string> = {
-  LOW: 'bg-blue-100 text-blue-800',
+  LOW: 'bg-info-100 text-info-800',
   MEDIUM: 'bg-yellow-100 text-yellow-800',
   HIGH: 'bg-orange-100 text-orange-800',
   CRITICAL: 'bg-red-100 text-red-800',
@@ -300,7 +301,7 @@ export function ApprovalQueue() {
                                 onClick={() =>
                                   handleDownloadAttachment(req.id, attachment.id, attachment.fileName)
                                 }
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                className="p-2 text-brand-primary hover:bg-red-50 rounded transition-colors"
                               >
                                 <Download className="w-4 h-4" />
                               </button>
@@ -311,25 +312,21 @@ export function ApprovalQueue() {
                     )}
 
                     {/* Action Buttons */}
-                    <div className="flex gap-3 pt-4 border-t border-gray-200">
+                    <div className="pt-4 border-t border-gray-200 space-y-3">
                       <Link
                         href={`/requisitions/${req.id}`}
-                        className="flex-1 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors text-center"
+                        className="block w-full px-4 py-2 text-sm font-medium text-brand-primary bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-center"
                       >
                         View Full Details
                       </Link>
-                      <Link
-                        href={`/requisitions/${req.id}?action=approve`}
-                        className="flex-1 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors text-center"
-                      >
-                        Approve
-                      </Link>
-                      <Link
-                        href={`/requisitions/${req.id}?action=reject`}
-                        className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors text-center"
-                      >
-                        Reject
-                      </Link>
+                      <ApprovalActions
+                        requisitionId={req.id}
+                        onSuccess={() => {
+                          fetchPendingRequisitions()
+                          setExpandedId(null)
+                        }}
+                        compact={true}
+                      />
                     </div>
                   </div>
                 )}
@@ -360,7 +357,7 @@ export function ApprovalQueue() {
                     onClick={() => setCurrentPage(page)}
                     className={`px-3 py-1 rounded-lg text-sm font-medium ${
                       currentPage === page
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-brand-primary text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
                     }`}
                   >

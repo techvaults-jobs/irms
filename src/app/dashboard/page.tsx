@@ -74,8 +74,8 @@ function DashboardContent() {
             transition={{ duration: 0.4 }}
           >
             <div>
-              <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
-              <p className="text-gray-600 mt-2">Welcome back, {user?.name}! Here&apos;s your overview.</p>
+              <h1 className="text-4xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
+              <p className="text-gray-600 mt-2 text-lg">Welcome back, <span className="font-semibold text-brand-primary">{user?.name}</span>! Here&apos;s your overview.</p>
             </div>
 
             {/* Quick Action Button */}
@@ -144,7 +144,7 @@ function DashboardContent() {
                   title="Pending Amount"
                   value={formatCurrency(stats?.pendingAmount || 0)}
                   icon={AlertCircle}
-                  color="blue"
+                  color="yellow"
                   delay={0.5}
                 />
               </>
@@ -160,33 +160,34 @@ function DashboardContent() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Quick Actions</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: 'Create Requisition', href: '/requisitions/new', icon: Plus, color: 'from-red-500 to-red-600' },
-                { label: 'View Approvals', href: '/approvals', icon: CheckCircle, color: 'from-green-500 to-green-600' },
-                { label: 'Generate Report', href: '/reports', icon: TrendingUp, color: 'from-blue-500 to-blue-600' },
-                { label: 'View Requisitions', href: '/requisitions', icon: FileText, color: 'from-purple-500 to-purple-600' },
+                { label: 'Create Requisition', href: '/requisitions/new', icon: Plus, color: 'from-brand-primary to-red-700', bg: 'bg-red-50', text: 'text-brand-primary' },
+                { label: 'View Approvals', href: '/approvals', icon: CheckCircle, color: 'from-success-500 to-success-600', bg: 'bg-success-50', text: 'text-success-600' },
+                { label: 'Generate Report', href: '/reports', icon: TrendingUp, color: 'from-info-500 to-info-600', bg: 'bg-info-50', text: 'text-info-600' },
+                { label: 'View Requisitions', href: '/requisitions', icon: FileText, color: 'from-purple-500 to-purple-600', bg: 'bg-purple-50', text: 'text-purple-600' },
               ].map((action, i) => {
                 const Icon = action.icon
                 return (
                   <Link key={action.href} href={action.href}>
                     <motion.div
-                      className={`bg-gradient-to-br ${action.color} rounded-lg p-6 text-white cursor-pointer group`}
+                      className={`${action.bg} border border-gray-200 rounded-xl p-6 cursor-pointer group shadow-sm hover:shadow-md transition-all`}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.7 + i * 0.1, duration: 0.3 }}
-                      whileHover={{ scale: 1.05, y: -4 }}
-                      whileTap={{ scale: 0.95 }}
+                      whileHover={{ scale: 1.02, y: -2 }}
+                      whileTap={{ scale: 0.98 }}
                     >
                       <motion.div
-                        className="flex items-center gap-3"
-                        whileHover={{ x: 4 }}
+                        className="flex items-center gap-4"
+                        whileHover={{ x: 2 }}
                       >
                         <motion.div
-                          whileHover={{ scale: 1.2, rotate: 10 }}
+                          className={`p-3 ${action.bg} rounded-lg`}
+                          whileHover={{ scale: 1.1, rotate: 5 }}
                           transition={{ type: 'spring', stiffness: 200, damping: 10 }}
                         >
-                          <Icon size={24} />
+                          <Icon size={24} className={action.text} />
                         </motion.div>
-                        <span className="font-semibold">{action.label}</span>
+                        <span className={`font-semibold ${action.text}`}>{action.label}</span>
                       </motion.div>
                     </motion.div>
                   </Link>
@@ -197,16 +198,23 @@ function DashboardContent() {
 
           {/* Info Section */}
           <motion.div
-            className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6"
+            className="bg-gradient-to-r from-red-50 via-red-100/30 to-red-50 border border-brand-primary/20 rounded-xl p-6 shadow-sm"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1, duration: 0.4 }}
-            whileHover={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+            whileHover={{ boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', scale: 1.01 }}
           >
-            <h3 className="text-lg font-semibold text-blue-900 mb-2">💡 Pro Tip</h3>
-            <p className="text-blue-800">
-              Use the quick actions above to navigate faster. Your recent requisitions and approvals are always just a click away!
-            </p>
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-brand-primary/10 rounded-lg flex-shrink-0">
+                <span className="text-xl">💡</span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Pro Tip</h3>
+                <p className="text-gray-700">
+                  Use the quick actions above to navigate faster. Your recent requisitions and approvals are always just a click away!
+                </p>
+              </div>
+            </div>
           </motion.div>
         </div>
       </PageTransition>

@@ -18,34 +18,39 @@ interface AnimatedStatCardProps {
 
 const colorMap = {
   red: {
-    bg: 'bg-brand-gray-light',
+    bg: 'bg-white',
     text: 'text-brand-primary',
-    icon: 'bg-brand-primary bg-opacity-10',
-    border: 'border-brand-primary border-opacity-20',
+    icon: 'bg-red-50',
+    border: 'border-gray-200',
+    iconColor: 'text-brand-primary',
   },
   blue: {
-    bg: 'bg-brand-gray-light',
-    text: 'text-brand-primary',
-    icon: 'bg-brand-primary bg-opacity-10',
-    border: 'border-brand-primary border-opacity-20',
+    bg: 'bg-white',
+    text: 'text-info-600',
+    icon: 'bg-info-50',
+    border: 'border-gray-200',
+    iconColor: 'text-info-600',
   },
   green: {
-    bg: 'bg-green-50',
-    text: 'text-green-600',
-    icon: 'bg-green-100',
-    border: 'border-green-200',
+    bg: 'bg-white',
+    text: 'text-success-600',
+    icon: 'bg-success-50',
+    border: 'border-gray-200',
+    iconColor: 'text-success-600',
   },
   yellow: {
-    bg: 'bg-yellow-50',
-    text: 'text-yellow-600',
-    icon: 'bg-yellow-100',
-    border: 'border-yellow-200',
+    bg: 'bg-white',
+    text: 'text-warning-600',
+    icon: 'bg-warning-50',
+    border: 'border-gray-200',
+    iconColor: 'text-warning-600',
   },
   purple: {
-    bg: 'bg-purple-50',
+    bg: 'bg-white',
     text: 'text-purple-600',
-    icon: 'bg-purple-100',
-    border: 'border-purple-200',
+    icon: 'bg-purple-50',
+    border: 'border-gray-200',
+    iconColor: 'text-purple-600',
   },
 }
 
@@ -139,7 +144,7 @@ export function AnimatedStatCard({
       initial="hidden"
       animate="visible"
       whileHover="hover"
-      className={`${colors.bg} border ${colors.border} rounded-lg p-6 cursor-pointer transition-all duration-200`}
+      className={`${colors.bg} border ${colors.border} rounded-xl p-6 cursor-pointer transition-all duration-200 shadow-md hover:shadow-lg`}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
@@ -147,7 +152,7 @@ export function AnimatedStatCard({
             variants={numberVariants}
             initial="hidden"
             animate="visible"
-            className="text-sm font-medium text-brand-gray mb-2"
+            className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3"
           >
             {title}
           </motion.p>
@@ -157,7 +162,7 @@ export function AnimatedStatCard({
             initial="hidden"
             animate="visible"
             transition={{ delay: 0.1 }}
-            className={`${colors.text} text-3xl font-bold`}
+            className={`${colors.text} text-3xl font-bold tracking-tight`}
           >
             {typeof value === 'number' ? displayValue : value}
           </motion.div>
@@ -181,9 +186,9 @@ export function AnimatedStatCard({
           initial="initial"
           animate="animate"
           whileHover="hover"
-          className={`${colors.icon} p-3 rounded-lg flex-shrink-0`}
+          className={`${colors.icon} p-3 rounded-xl flex-shrink-0`}
         >
-          <Icon size={24} className={colors.text} />
+          <Icon size={24} className={colors.iconColor} />
         </motion.div>
       </div>
     </motion.div>

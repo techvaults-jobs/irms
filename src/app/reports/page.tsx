@@ -121,7 +121,7 @@ function ReportsContent() {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center min-h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary" />
         </div>
       </DashboardLayout>
     )
@@ -132,12 +132,12 @@ function ReportsContent() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Reports</h1>
-          <p className="text-gray-600 mt-1">View and analyze financial data by transaction</p>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Reports</h1>
+          <p className="text-gray-600 mt-1 text-lg">View and analyze financial data by transaction</p>
         </div>
 
         {/* Controls */}
-        <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Report Type */}
             <div>
@@ -145,7 +145,7 @@ function ReportsContent() {
               <select
                 value={reportType}
                 onChange={(e) => setReportType(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all"
               >
                 {reportTypes.map((type) => (
                   <option key={type.id} value={type.id}>
@@ -162,7 +162,7 @@ function ReportsContent() {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all"
               />
             </div>
 
@@ -173,7 +173,7 @@ function ReportsContent() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all"
               />
             </div>
 
@@ -184,7 +184,7 @@ function ReportsContent() {
                   const params = new URLSearchParams({ startDate, endDate })
                   window.location.href = `/api/reports/${reportType}/export?${params}`
                 }}
-                className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                className="w-full px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 active:opacity-80 transition-all duration-200 flex items-center justify-center gap-2 font-semibold shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
               >
                 <Download size={18} />
                 Export
@@ -195,14 +195,14 @@ function ReportsContent() {
 
         {/* Report Display */}
         {error && (
-          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-3 p-4 bg-error-50 border border-error-200 rounded-xl">
             <AlertCircle className="w-5 h-5 text-red-600" />
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
         {isLoading2 ? (
-          <div className="flex items-center justify-center p-12 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center justify-center p-12 bg-white rounded-xl border border-gray-200 shadow-sm">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
           </div>
         ) : reportData ? (
@@ -239,7 +239,7 @@ function ReportsContent() {
                   }
                   
                   return (
-                    <div key={key} className="bg-white rounded-lg shadow border border-gray-200 p-4">
+                    <div key={key} className="bg-white rounded-xl shadow-md border border-gray-200 p-4 hover:shadow-lg transition-shadow">
                       <p className="text-sm font-medium text-gray-600">{formattedKey}</p>
                       <p className="text-2xl font-bold text-gray-900 mt-2">
                         {displayValue}
@@ -263,7 +263,7 @@ function ReportsContent() {
                   }, 0)
 
                   return (
-                    <div key={dateKey} className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+                    <div key={dateKey} className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
                       {/* Date Header */}
                       <button
                         onClick={() => toggleDateExpanded(dateKey)}
@@ -394,7 +394,7 @@ function ReportsContent() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+              <div className="text-center py-12 bg-white rounded-xl border border-gray-200 shadow-sm">
                 <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-600">No data available for the selected period</p>
               </div>

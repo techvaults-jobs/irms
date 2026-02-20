@@ -26,13 +26,13 @@ function RequisitionsContent() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Requisitions</h1>
-              <p className="text-gray-600 mt-2">Manage and track all your requisitions</p>
+              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Requisitions</h1>
+              <p className="text-gray-600 mt-2 text-lg">Manage and track all your requisitions</p>
             </div>
             {user?.role === 'STAFF' || user?.role === 'ADMIN' ? (
               <Link
                 href="/requisitions/new"
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                className="flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:opacity-90 active:opacity-80 transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
               >
                 <Plus size={18} />
                 Create Requisition
@@ -40,7 +40,7 @@ function RequisitionsContent() {
             ) : null}
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
             <RequisitionList />
           </div>
         </div>

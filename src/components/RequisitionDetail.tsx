@@ -5,9 +5,10 @@ import { AlertCircle, Download, FileText } from 'lucide-react'
 import { FinancialSummary } from './FinancialSummary'
 import { PaymentRecordingForm } from './PaymentRecordingForm'
 import { AuditTrailViewer } from './AuditTrailViewer'
-import { ApprovalAction } from './ApprovalAction'
+import { ApprovalActions } from './ApprovalActions'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCurrency } from '@/lib/utils'
+import { useSearchParams } from 'next/navigation'
 
 interface Attachment {
   id: string
@@ -48,7 +49,7 @@ interface RequisitionDetailProps {
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-800',
-  SUBMITTED: 'bg-blue-100 text-blue-800',
+  SUBMITTED: 'bg-info-100 text-info-800',
   UNDER_REVIEW: 'bg-yellow-100 text-yellow-800',
   APPROVED: 'bg-green-100 text-green-800',
   REJECTED: 'bg-red-100 text-red-800',
@@ -58,6 +59,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
   const { user } = useAuth()
+  const searchParams = useSearchParams()
   const [requisition, setRequisition] = useState<any>(null)
   const [auditTrail, setAuditTrail] = useState<AuditEntry[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -68,6 +70,20 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
   useEffect(() => {
     fetchRequisitionDetails()
   }, [requisitionId])
+
+  // Handle URL query parameters for direct approve/reject actions
+  useEffect(() => {
+    const action = searchParams?.get('action')
+    if (action === 'approve' || action === 'reject') {
+      // Scroll to approval section when action parameter is present
+      setTimeout(() => {
+        const approvalSection = document.getElementById('approval-actions-section')
+        if (approvalSection) {
+          approvalSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 500)
+    }
+  }, [searchParams])
 
   const fetchRequisitionDetails = async () => {
     setIsLoading(true)
@@ -159,8 +175,25 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
     return <div className="p-8 text-center text-gray-500">Requisition not found</div>
   }
 
+  const canApprove = (requisition?.status === 'SUBMITTED' || requisition?.status === 'UNDER_REVIEW') && 
+                     (user?.role === 'MANAGER' || user?.role === 'FINANCE' || user?.role === 'ADMIN')
+  const hasPendingSteps = requisition?.approvalSteps?.some((step: ApprovalStep) => step.status === 'PENDING')
+
   return (
     <div className="space-y-6">
+      {/* Prominent Approval Actions Section */}
+      {canApprove && hasPendingSteps && (
+        <div id="approval-actions-section">
+          <ApprovalActions
+            requisitionId={requisitionId}
+            onSuccess={() => {
+              fetchRequisitionDetails()
+            }}
+            initialAction={searchParams?.get('action') as 'approve' | 'reject' | undefined}
+          />
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
         <div className="flex justify-between items-start mb-4">
@@ -212,9 +245,9 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
         <div className="flex gap-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('details')}
-            className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap ${
+            className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap transition-colors ${
               activeTab === 'details'
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-brand-primary text-brand-primary'
                 : 'border-transparent text-gray-600 hover:text-gray-900'
             }`}
           >
@@ -240,18 +273,6 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
               }`}
             >
               Record Payment
-            </button>
-          )}
-          {requisition?.status === 'SUBMITTED' || requisition?.status === 'UNDER_REVIEW' && (user?.role === 'MANAGER' || user?.role === 'FINANCE' || user?.role === 'ADMIN') && (
-            <button
-              onClick={() => setActiveTab('approval')}
-              className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap ${
-                activeTab === 'approval'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Approve/Reject
             </button>
           )}
           <button
@@ -390,7 +411,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
                   </div>
                   <button
                     onClick={() => handleDownloadAttachment(attachment.id, attachment.fileName)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                    className="p-2 text-brand-primary hover:bg-red-50 rounded-lg transition-colors"
                   >
                     <Download className="w-5 h-5" />
                   </button>
@@ -432,29 +453,6 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
         </div>
       )}
 
-      {/* Approval Tab */}
-      {activeTab === 'approval' && (
-        <div>
-          <ApprovalAction
-            requisitionId={requisitionId}
-            action="approve"
-            onSuccess={() => {
-              fetchRequisitionDetails()
-              setActiveTab('details')
-            }}
-          />
-          <div className="mt-6">
-            <ApprovalAction
-              requisitionId={requisitionId}
-              action="reject"
-              onSuccess={() => {
-                fetchRequisitionDetails()
-                setActiveTab('details')
-              }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   )
 }

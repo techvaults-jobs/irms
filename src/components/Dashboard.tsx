@@ -104,15 +104,15 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
   const getActivityColor = (type: string) => {
     switch (type) {
       case 'CREATED':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-info-100 text-info-800'
       case 'SUBMITTED':
         return 'bg-purple-100 text-purple-800'
       case 'APPROVED':
-        return 'bg-green-100 text-green-800'
+        return 'bg-success-100 text-success-800'
       case 'REJECTED':
-        return 'bg-red-100 text-red-800'
+        return 'bg-error-100 text-error-800'
       case 'PAID':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-warning-100 text-warning-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -121,8 +121,8 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
   if (isLoading) {
     return (
       <div className="p-8 text-center text-gray-500">
-        <div className="inline-block">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="inline-block">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary" />
         </div>
         <p className="mt-4">Loading dashboard...</p>
       </div>
@@ -132,9 +132,9 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
   return (
     <div className="space-y-6">
       {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-sm p-6 text-white">
-        <h1 className="text-2xl font-bold">Welcome back, {userName}!</h1>
-        <p className="text-blue-100 mt-1">
+      <div className="bg-gradient-to-r from-brand-primary to-red-700 rounded-xl shadow-lg p-6 text-white">
+        <h1 className="text-2xl font-bold tracking-tight">Welcome back, {userName}!</h1>
+        <p className="text-red-100 mt-1 font-medium">
           {userRole === 'ADMIN' && 'System Administrator'}
           {userRole === 'FINANCE' && 'Finance Officer'}
           {userRole === 'MANAGER' && 'Manager'}
@@ -144,9 +144,9 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
 
       {/* Error Message */}
       {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="flex items-center gap-2 p-4 bg-error-50 border border-error-200 rounded-xl">
+          <AlertCircle className="w-5 h-5 text-error-600 flex-shrink-0" />
+          <p className="text-sm text-error-700 font-medium">{error}</p>
         </div>
       )}
 
@@ -154,19 +154,19 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Requisitions */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-600 uppercase">Total Requisitions</p>
-              <TrendingUp className="w-4 h-4 text-blue-600" />
+              <TrendingUp className="w-5 h-5 text-brand-primary" />
             </div>
-            <p className="text-3xl font-bold text-gray-900">{stats.totalRequisitions}</p>
+            <p className="text-3xl font-bold text-gray-900 tracking-tight">{stats.totalRequisitions}</p>
             <p className="text-xs text-gray-600 mt-2">
               {stats.draftRequisitions} draft, {stats.pendingApproval} pending
             </p>
           </div>
 
           {/* Pending Approval */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-600 uppercase">Pending Approval</p>
               <Clock className="w-4 h-4 text-yellow-600" />
@@ -176,7 +176,7 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
           </div>
 
           {/* Approved Requisitions */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-600 uppercase">Approved</p>
               <CheckCircle className="w-4 h-4 text-green-600" />
@@ -188,7 +188,7 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
           </div>
 
           {/* Rejected Requisitions */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-600 uppercase">Rejected</p>
               <AlertTriangle className="w-4 h-4 text-red-600" />
@@ -203,23 +203,23 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
       {stats && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Estimated Cost */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
             <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Estimated Cost</p>
-            <p className="text-2xl font-bold text-blue-600">{formatCurrency(stats.totalEstimatedCost)}</p>
+            <p className="text-2xl font-bold text-brand-primary tracking-tight">{formatCurrency(stats.totalEstimatedCost)}</p>
             <p className="text-xs text-gray-600 mt-2">Total requested amount</p>
           </div>
 
           {/* Approved Cost */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
             <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Approved Cost</p>
-            <p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalApprovedCost)}</p>
+            <p className="text-2xl font-bold text-success-600 tracking-tight">{formatCurrency(stats.totalApprovedCost)}</p>
             <p className="text-xs text-gray-600 mt-2">Total approved amount</p>
           </div>
 
           {/* Actual Cost */}
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
             <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Actual Cost</p>
-            <p className="text-2xl font-bold text-purple-600">{formatCurrency(stats.totalActualCost)}</p>
+            <p className="text-2xl font-bold text-purple-600 tracking-tight">{formatCurrency(stats.totalActualCost)}</p>
             <p className="text-xs text-gray-600 mt-2">Total paid amount</p>
           </div>
         </div>
@@ -227,12 +227,12 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
 
       {/* Pending Liabilities */}
       {stats && stats.pendingLiabilities > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="bg-warning-50 border border-warning-200 rounded-xl p-4 shadow-sm">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-warning-600 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-semibold text-yellow-900">Pending Liabilities</p>
-              <p className="text-sm text-yellow-800 mt-1">
+              <p className="font-semibold text-warning-900">Pending Liabilities</p>
+              <p className="text-sm text-warning-800 mt-1">
                 {formatCurrency(stats.pendingLiabilities)} in approved but unpaid requisitions
               </p>
             </div>
@@ -241,7 +241,7 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
       )}
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+      <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
         {recentActivity.length === 0 ? (
           <p className="text-gray-600 text-center py-8">No recent activity</p>
@@ -250,7 +250,7 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
             {recentActivity.slice(0, 5).map(activity => (
               <div
                 key={activity.id}
-                className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-all hover:shadow-sm"
               >
                 {/* Icon */}
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0 ${getActivityColor(activity.type)}`}>
@@ -277,21 +277,21 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+      <div className="bg-white rounded-xl shadow-md p-6 border border-gray-200">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {userRole === 'STAFF' && (
             <>
               <a
                 href="/requisitions/new"
-                className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg text-center hover:bg-blue-100 transition-colors"
+                className="px-4 py-3 bg-red-50 border border-brand-primary/20 rounded-xl text-center hover:bg-red-100 transition-all shadow-sm hover:shadow-md"
               >
-                <p className="font-medium text-blue-900">Create Requisition</p>
-                <p className="text-xs text-blue-700 mt-1">Start a new request</p>
+                <p className="font-semibold text-brand-primary">Create Requisition</p>
+                <p className="text-xs text-gray-600 mt-1">Start a new request</p>
               </a>
               <a
                 href="/requisitions"
-                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-center hover:bg-gray-100 transition-colors"
+                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-center hover:bg-gray-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-gray-900">My Requisitions</p>
                 <p className="text-xs text-gray-600 mt-1">View your requests</p>
@@ -303,14 +303,14 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
             <>
               <a
                 href="/approvals"
-                className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center hover:bg-yellow-100 transition-colors"
+                className="px-4 py-3 bg-warning-50 border border-warning-200 rounded-xl text-center hover:bg-warning-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-yellow-900">Approval Queue</p>
                 <p className="text-xs text-yellow-700 mt-1">Review pending</p>
               </a>
               <a
                 href="/reports"
-                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-center hover:bg-gray-100 transition-colors"
+                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-center hover:bg-gray-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-gray-900">Department Report</p>
                 <p className="text-xs text-gray-600 mt-1">View spending</p>
@@ -322,14 +322,14 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
             <>
               <a
                 href="/requisitions?status=APPROVED"
-                className="px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-center hover:bg-green-100 transition-colors"
+                className="px-4 py-3 bg-success-50 border border-success-200 rounded-xl text-center hover:bg-success-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-green-900">Record Payment</p>
                 <p className="text-xs text-green-700 mt-1">Process payments</p>
               </a>
               <a
                 href="/reports"
-                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-center hover:bg-gray-100 transition-colors"
+                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-center hover:bg-gray-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-gray-900">Financial Reports</p>
                 <p className="text-xs text-gray-600 mt-1">View analytics</p>
@@ -341,7 +341,7 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
             <>
               <a
                 href="/users"
-                className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-center hover:bg-red-100 transition-colors"
+                className="px-4 py-3 bg-error-50 border border-error-200 rounded-xl text-center hover:bg-error-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-red-900">User Management</p>
                 <p className="text-xs text-red-700 mt-1">Manage users</p>
@@ -355,14 +355,14 @@ export function Dashboard({ userRole, userName }: DashboardProps) {
               </a>
               <a
                 href="/reports"
-                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-center hover:bg-gray-100 transition-colors"
+                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-center hover:bg-gray-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-gray-900">System Reports</p>
                 <p className="text-xs text-gray-600 mt-1">View all data</p>
               </a>
               <a
                 href="/audit-trail"
-                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-center hover:bg-gray-100 transition-colors"
+                className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-center hover:bg-gray-100 transition-all shadow-sm hover:shadow-md"
               >
                 <p className="font-medium text-gray-900">Audit Trail</p>
                 <p className="text-xs text-gray-600 mt-1">View logs</p>

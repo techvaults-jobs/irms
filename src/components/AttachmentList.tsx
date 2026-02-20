@@ -201,7 +201,7 @@ export function AttachmentList({
           <div className="flex items-center gap-2 ml-4 flex-shrink-0">
             <button
               onClick={() => handleDownload(attachment.id, attachment.fileName)}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              className="p-2 text-brand-primary hover:bg-red-50 rounded-lg transition-colors"
               title="Download attachment"
             >
               <Download className="w-5 h-5" />
@@ -221,8 +221,8 @@ export function AttachmentList({
       ))}
 
       {/* Info Box */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-        <p className="text-sm text-blue-700">
+      <div className="bg-info-50 border border-info-200 rounded-xl p-4 mt-4 shadow-sm">
+        <p className="text-sm text-info-700 font-medium">
           <strong>Total attachments:</strong> {attachments.length}
         </p>
       </div>

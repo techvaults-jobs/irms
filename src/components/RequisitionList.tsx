@@ -23,7 +23,7 @@ interface RequisitionListProps {
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-800',
-  SUBMITTED: 'bg-blue-100 text-blue-800',
+  SUBMITTED: 'bg-info-100 text-info-800',
   UNDER_REVIEW: 'bg-yellow-100 text-yellow-800',
   APPROVED: 'bg-green-100 text-green-800',
   REJECTED: 'bg-red-100 text-red-800',
@@ -190,7 +190,7 @@ export function RequisitionList({ initialStatus }: RequisitionListProps) {
                     <td className="px-6 py-4 text-sm">
                       <Link
                         href={`/requisitions/${req.id}`}
-                        className="text-blue-600 hover:text-blue-800 font-medium"
+                        className="text-brand-primary hover:text-red-700 font-semibold transition-colors"
                       >
                         View
                       </Link>
@@ -223,7 +223,7 @@ export function RequisitionList({ initialStatus }: RequisitionListProps) {
                     onClick={() => setCurrentPage(page)}
                     className={`px-3 py-1 rounded-lg text-sm font-medium ${
                       currentPage === page
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-brand-primary text-white'
                         : 'border border-gray-300 hover:bg-gray-50'
                     }`}
                   >

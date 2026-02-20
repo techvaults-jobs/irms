@@ -10,15 +10,20 @@ export interface ExportOptions {
  * Convert data to CSV format
  */
 export function convertToCSV(data: any[], headers?: string[]): string {
-  if (data.length === 0) {
+  // Get headers from first object if not provided
+  const csvHeaders = headers || (data.length > 0 ? Object.keys(data[0]) : [])
+  
+  if (csvHeaders.length === 0) {
     return ''
   }
 
-  // Get headers from first object if not provided
-  const csvHeaders = headers || Object.keys(data[0])
-
   // Create header row
   const headerRow = csvHeaders.map(h => escapeCSVField(h)).join(',')
+
+  // If no data, return headers only
+  if (data.length === 0) {
+    return headerRow
+  }
 
   // Create data rows
   const dataRows = data.map(row => {
@@ -69,13 +74,18 @@ function formatValue(value: any): string {
  * Generate CSV content for monthly spending report
  */
 export function generateMonthlySpendingCSV(data: any[]): string {
+  if (!data || data.length === 0) {
+    // Return headers only for empty data
+    return 'Month,Estimated Total,Approved Total,Actual Total,Count\n'
+  }
+  
   const headers = ['Month', 'Estimated Total', 'Approved Total', 'Actual Total', 'Count']
   const formattedData = data.map(item => ({
-    'Month': item.month,
-    'Estimated Total': item.estimatedTotal.toString(),
-    'Approved Total': item.approvedTotal.toString(),
-    'Actual Total': item.actualTotal.toString(),
-    'Count': item.count,
+    'Month': item.month || '',
+    'Estimated Total': item.estimatedTotal?.toString() || '0',
+    'Approved Total': item.approvedTotal?.toString() || '0',
+    'Actual Total': item.actualTotal?.toString() || '0',
+    'Count': item.count || 0,
   }))
   return convertToCSV(formattedData, headers)
 }
@@ -241,12 +251,18 @@ export function convertToExcel(data: any[], headers?: string[]): Buffer {
  */
 export function generateMonthlySpendingExcel(data: any[]): Buffer {
   const headers = ['Month', 'Estimated Total', 'Approved Total', 'Actual Total', 'Count']
+  
+  if (!data || data.length === 0) {
+    // Return empty workbook with headers
+    return convertToExcel([], headers)
+  }
+  
   const formattedData = data.map(item => ({
-    'Month': item.month,
-    'Estimated Total': item.estimatedTotal.toString(),
-    'Approved Total': item.approvedTotal.toString(),
-    'Actual Total': item.actualTotal.toString(),
-    'Count': item.count,
+    'Month': item.month || '',
+    'Estimated Total': item.estimatedTotal?.toString() || '0',
+    'Approved Total': item.approvedTotal?.toString() || '0',
+    'Actual Total': item.actualTotal?.toString() || '0',
+    'Count': item.count || 0,
   }))
   return convertToExcel(formattedData, headers)
 }

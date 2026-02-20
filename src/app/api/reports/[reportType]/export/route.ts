@@ -16,6 +16,7 @@ import {
   generateYearlySummaryExcel,
   getMimeType,
   getFileExtension,
+  convertToExcel,
 } from '@/lib/export-utils'
 import { NextRequest, NextResponse } from 'next/server'
 import { UserRole } from '@prisma/client'
@@ -23,7 +24,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { reportType: string } }
+  { params }: { params: Promise<{ reportType: string }> | { reportType: string } }
 ) {
   try {
     const session = await auth()
@@ -37,7 +38,17 @@ export async function GET(
 
     const userRole = session.user.role as UserRole
     const userId = session.user.id as string
-    const reportType = params.reportType
+    
+    // Handle both Promise and direct params (Next.js 13+ compatibility)
+    const resolvedParams = params instanceof Promise ? await params : params
+    const reportType = resolvedParams.reportType
+    
+    if (!reportType) {
+      return NextResponse.json(
+        { error: 'Report type is required' },
+        { status: 400 }
+      )
+    }
 
     // Check permission - Finance and Admin can generate reports, Managers can view department reports
     const canGenerateReports = hasPermission(userRole, 'generate_reports')
@@ -91,13 +102,33 @@ export async function GET(
     // Generate report based on type
     switch (reportType) {
       case 'monthly-spending': {
-        const report = await ReportingService.generateMonthlySpendings(startDate, endDate)
-        if (format === 'csv') {
-          csvContent = generateMonthlySpendingCSV(report)
-        } else {
-          excelBuffer = generateMonthlySpendingExcel(report)
+        try {
+          const report = await ReportingService.generateMonthlySpendings(startDate, endDate)
+          
+          // Handle empty report data
+          if (!report || (Array.isArray(report) && report.length === 0)) {
+            // Return empty report with headers
+            if (format === 'csv') {
+              csvContent = 'Month,Estimated Total,Approved Total,Actual Total,Count\n'
+            } else {
+              const headers = ['Month', 'Estimated Total', 'Approved Total', 'Actual Total', 'Count']
+              excelBuffer = convertToExcel([], headers)
+            }
+          } else {
+            if (format === 'csv') {
+              csvContent = generateMonthlySpendingCSV(report)
+            } else {
+              excelBuffer = generateMonthlySpendingExcel(report)
+            }
+          }
+          filename = `monthly-spending-${new Date().toISOString().split('T')[0]}`
+        } catch (error) {
+          console.error('Error generating monthly spending report:', error)
+          return NextResponse.json(
+            { error: `Failed to generate monthly spending report: ${error instanceof Error ? error.message : 'Unknown error'}` },
+            { status: 500 }
+          )
         }
-        filename = `monthly-spending-${new Date().toISOString().split('T')[0]}`
         break
       }
 
@@ -203,9 +234,19 @@ export async function GET(
         )
     }
 
-    if (!csvContent && !excelBuffer) {
+    // Validate that content was generated
+    if (format === 'csv' && !csvContent) {
+      console.error('CSV content is empty')
       return NextResponse.json(
-        { error: 'Failed to generate report content' },
+        { error: 'Failed to generate CSV content. Report may be empty or an error occurred.' },
+        { status: 500 }
+      )
+    }
+    
+    if (format === 'excel' && !excelBuffer) {
+      console.error('Excel buffer is empty')
+      return NextResponse.json(
+        { error: 'Failed to generate Excel content. Report may be empty or an error occurred.' },
         { status: 500 }
       )
     }
