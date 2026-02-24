@@ -8,6 +8,7 @@ import { FinancialSummary } from './FinancialSummary'
 import { PaymentRecordingForm } from './PaymentRecordingForm'
 import { AuditTrailViewer } from './AuditTrailViewer'
 import { ApprovalActions } from './ApprovalActions'
+import { ConfirmationModal } from './ConfirmationModal'
 import { useAuth } from '@/hooks/useAuth'
 import { formatCurrency } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
@@ -69,6 +70,8 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'details' | 'history' | 'attachments' | 'financial' | 'payment' | 'approval'>('details')
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     fetchRequisitionDetails()
@@ -162,10 +165,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
   }
 
   const handleDeleteRequisition = async () => {
-    if (!window.confirm('Are you sure you want to delete this requisition? This action cannot be undone.')) {
-      return
-    }
-
+    setIsDeleting(true)
     try {
       const response = await fetch(`/api/requisitions/${requisitionId}/delete`, {
         method: 'POST',
@@ -180,6 +180,8 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
       router.push('/requisitions')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete requisition')
+      setShowDeleteModal(false)
+      setIsDeleting(false)
     }
   }
 
@@ -235,7 +237,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
                   </button>
                 </Link>
                 <button
-                  onClick={() => handleDeleteRequisition()}
+                  onClick={() => setShowDeleteModal(true)}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm"
                 >
                   Delete
@@ -495,6 +497,18 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        title="Delete Requisition"
+        message={`Are you sure you want to delete "${requisition?.title}"? This action cannot be undone and will permanently remove all associated data including attachments and audit trails.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isDangerous={true}
+        isLoading={isDeleting}
+        onConfirm={handleDeleteRequisition}
+        onCancel={() => setShowDeleteModal(false)}
+      />
     </div>
   )
 }
