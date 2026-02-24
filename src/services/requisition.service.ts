@@ -403,6 +403,26 @@ export class RequisitionService {
     return updated
   }
 
+  static async deleteRequisition(requisitionId: string) {
+    const requisition = await prisma.requisition.findUnique({
+      where: { id: requisitionId },
+    })
+
+    if (!requisition) {
+      throw new Error('Requisition not found')
+    }
+
+    // Delete the requisition (cascading deletes will handle related records)
+    await prisma.requisition.delete({
+      where: { id: requisitionId },
+    })
+
+    // Invalidate report cache
+    ReportingService.invalidateReportCache()
+
+    return { success: true, id: requisitionId }
+  }
+
   static isValidStatusTransition(fromStatus: string, toStatus: string): boolean {
     return isValidStatusTransition(fromStatus as RequisitionStatusType, toStatus as RequisitionStatusType)
   }
