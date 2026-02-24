@@ -95,7 +95,7 @@ export async function PATCH(
     }
 
     const body = await req.json()
-    const updated = await RequisitionService.updateRequisition(params.id, body)
+    const updated = await RequisitionService.updateRequisition(params.id, body, isAdmin)
 
     // Record field updates in audit trail
     for (const [key, value] of Object.entries(body)) {

@@ -75,7 +75,8 @@ export class RequisitionService {
 
   static async updateRequisition(
     requisitionId: string,
-    data: UpdateRequisitionInput
+    data: UpdateRequisitionInput,
+    isAdmin: boolean = false
   ) {
     const requisition = await prisma.requisition.findUnique({
       where: { id: requisitionId },
@@ -85,7 +86,8 @@ export class RequisitionService {
       throw new Error('Requisition not found')
     }
 
-    if (requisition.status !== RequisitionStatus.DRAFT) {
+    // Only allow non-draft updates if user is admin
+    if (!isAdmin && requisition.status !== RequisitionStatus.DRAFT) {
       throw new Error('Can only update requisitions in Draft status')
     }
 
