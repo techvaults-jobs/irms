@@ -82,8 +82,12 @@ export async function PATCH(
       )
     }
 
-    // Check ownership
-    if (requisition.submitter.id !== session.user.id) {
+    // Check if user can edit: owner or admin
+    const userRole = session.user.role as UserRole
+    const isOwner = requisition.submitter.id === session.user.id
+    const isAdmin = userRole === 'ADMIN'
+
+    if (!isOwner && !isAdmin) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }

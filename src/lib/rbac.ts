@@ -2,6 +2,7 @@ import { UserRole } from '@prisma/client'
 
 export type Permission = 
   | 'create_requisition'
+  | 'edit_requisition'
   | 'view_own_requisitions'
   | 'view_all_requisitions'
   | 'approve_requisition'
@@ -39,6 +40,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
   ],
   ADMIN: [
     'create_requisition',
+    'edit_requisition',
     'view_all_requisitions',
     'approve_requisition',
     'reject_requisition',

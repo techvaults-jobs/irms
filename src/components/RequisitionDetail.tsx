@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { AlertCircle, Download, FileText } from 'lucide-react'
 import { FinancialSummary } from './FinancialSummary'
 import { PaymentRecordingForm } from './PaymentRecordingForm'
@@ -201,13 +202,22 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
             <h1 className="text-2xl font-bold text-gray-900">{requisition.title}</h1>
             <p className="text-sm text-gray-600 mt-1">ID: {requisition.id}</p>
           </div>
-          <span
-            className={`inline-block px-4 py-2 rounded-full text-sm font-semibold ${
-              STATUS_COLORS[requisition.status] || 'bg-gray-100 text-gray-800'
-            }`}
-          >
-            {requisition.status.replace(/_/g, ' ')}
-          </span>
+          <div className="flex items-center gap-3">
+            {user?.role === 'ADMIN' && (
+              <Link href={`/requisitions/${requisitionId}/edit`}>
+                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
+                  Edit
+                </button>
+              </Link>
+            )}
+            <span
+              className={`inline-block px-4 py-2 rounded-full text-sm font-semibold ${
+                STATUS_COLORS[requisition.status] || 'bg-gray-100 text-gray-800'
+              }`}
+            >
+              {requisition.status.replace(/_/g, ' ')}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
