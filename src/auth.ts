@@ -125,33 +125,45 @@ const authConfig = {
   },
   callbacks: {
     async jwt({ token, user, account }: any) {
-      log('jwt() callback called', { userId: user?.id, hasUser: !!user, hasAccount: !!account })
-      
-      if (user) {
-        log('✅ User object in jwt callback', { id: user.id, email: (user as any).email })
-        token.id = user.id
-        token.role = (user as any).role
-        token.departmentId = (user as any).departmentId
-        log('✅ Token updated with user data', { tokenId: token.id, role: token.role })
-      } else {
-        log('⚠️  No user object in jwt callback (this is normal on subsequent requests)')
+      try {
+        log('jwt() callback called', { userId: user?.id, hasUser: !!user, hasAccount: !!account })
+        
+        if (user) {
+          log('✅ User object in jwt callback', { id: user.id, email: (user as any).email })
+          token.id = user.id
+          token.role = (user as any).role
+          token.departmentId = (user as any).departmentId
+          log('✅ Token updated with user data', { tokenId: token.id, role: token.role })
+        } else {
+          log('⚠️  No user object in jwt callback (this is normal on subsequent requests)')
+        }
+        
+        return token
+      } catch (error) {
+        log('❌ Error in jwt callback', error)
+        console.error('[AUTH] Error in jwt callback:', error)
+        throw error
       }
-      
-      return token
     },
     async session({ session, token }: any) {
-      log('session() callback called', { tokenId: token.id, hasSessionUser: !!session.user })
-      
-      if (session.user) {
-        session.user.id = token.id as string
-        session.user.role = token.role as string
-        session.user.departmentId = token.departmentId as string
-        log('✅ Session updated with token data', { userId: session.user.id, role: session.user.role })
-      } else {
-        log('❌ No session.user object')
+      try {
+        log('session() callback called', { tokenId: token.id, hasSessionUser: !!session.user })
+        
+        if (session.user) {
+          session.user.id = token.id as string
+          session.user.role = token.role as string
+          session.user.departmentId = token.departmentId as string
+          log('✅ Session updated with token data', { userId: session.user.id, role: session.user.role })
+        } else {
+          log('❌ No session.user object')
+        }
+        
+        return session
+      } catch (error) {
+        log('❌ Error in session callback', error)
+        console.error('[AUTH] Error in session callback:', error)
+        throw error
       }
-      
-      return session
     },
   },
   session: {
