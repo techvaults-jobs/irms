@@ -166,9 +166,16 @@ export function RequisitionForm({ initialData, isEditing = false }: RequisitionF
           const data = await updateResponse.json()
           throw new Error(data.error || 'Failed to update requisition')
         }
+
+        // For editing, just save and redirect - don't try to submit
+        setSuccess(true)
+        setTimeout(() => {
+          router.push(`/requisitions/${requisitionId}`)
+        }, 1500)
+        return
       }
 
-      // Submit the requisition
+      // Submit the requisition (only for new requisitions)
       const submitRequestOptions = addCSRFTokenToRequest(
         {
           method: 'POST',
@@ -363,7 +370,7 @@ export function RequisitionForm({ initialData, isEditing = false }: RequisitionF
           disabled={isLoading}
           className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
         >
-          {isLoading ? 'Saving...' : 'Save as Draft'}
+          {isLoading ? 'Saving...' : isEditing ? 'Save Changes' : 'Save as Draft'}
         </button>
         <button
           type="button"
@@ -371,7 +378,7 @@ export function RequisitionForm({ initialData, isEditing = false }: RequisitionF
           disabled={isLoading}
           className="px-6 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:opacity-90 active:opacity-80 disabled:opacity-50 transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
         >
-          {isLoading ? 'Submitting...' : 'Submit Requisition'}
+          {isLoading ? (isEditing ? 'Saving...' : 'Submitting...') : (isEditing ? 'Save & Close' : 'Submit Requisition')}
         </button>
       </div>
     </form>
