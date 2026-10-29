@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2, Paperclip, Save, Send } from 'lucide-react'
+import { Landmark, Loader2, Paperclip, Save, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,21 @@ import { FieldError } from '@/components/auth/field-error'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { FileDropzone, uploadAttachment } from '@/components/attachments/file-dropzone'
 import { useCSRFToken, addCSRFTokenToRequest } from '@/hooks/useCSRFToken'
+import { PayeeFields } from '@/components/payments/payee-fields'
+import { payeeDisplayName } from '@/components/payments/payee-summary'
+import { useAuth } from '@/hooks/useAuth'
 import { URGENCY } from '@/lib/status'
+import {
+  PAYEE_TYPES,
+  PAYEE_TYPE_KEYS,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_KEYS,
+  payeeIssues,
+  paymentMethodLabel,
+  pickPayeeDetails,
+  type PayeeDetails,
+  type PayeeField,
+} from '@/lib/payment'
 import { cn, formatMoney, getApiErrorMessage } from '@/lib/utils'
 
 interface RequisitionFormProps {
@@ -32,7 +46,7 @@ interface RequisitionFormProps {
     businessJustification: string
     status?: string
     attachments?: unknown[]
-  }
+  } & PayeeDetails
   isEditing?: boolean
   onCancel?: () => void
 }
@@ -47,6 +61,8 @@ const CURRENCIES = [
   { value: 'CAD', label: 'CAD — Canadian Dollar' },
 ]
 
+const NO_PREFERENCE = 'NONE'
+
 const URGENCY_HELP: Record<string, string> = {
   LOW: 'Within a month',
   MEDIUM: 'Within two weeks',
@@ -60,6 +76,16 @@ export function RequisitionForm({ initialData, isEditing = false, onCancel }: Re
   const [pending, setPending] = useState<'draft' | 'submit' | null>(null)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [files, setFiles] = useState<File[]>([])
+  const { user } = useAuth()
+  const [payee, setPayee] = useState<PayeeDetails>(() => {
+    const initial = pickPayeeDetails(initialData ?? {})
+    return { ...initial, payeeType: initial.payeeType ?? 'VENDOR' }
+  })
+
+  const setPayeeField = (name: PayeeField, value: string) => {
+    setPayee(prev => ({ ...prev, [name]: value }))
+    if (validationErrors[name]) setValidationErrors(prev => ({ ...prev, [name]: '' }))
+  }
 
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
@@ -79,8 +105,8 @@ export function RequisitionForm({ initialData, isEditing = false, onCancel }: Re
     if (validationErrors[name]) setValidationErrors(prev => ({ ...prev, [name]: '' }))
   }
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {}
+  const validateForm = (mode: 'draft' | 'submit') => {
+    const errors: Record<string, string> = mode === 'submit' ? { ...payeeIssues(payee, payee.preferredPaymentMethod, formData.currency) } : {}
     if (!formData.title.trim()) errors.title = 'Title is required'
     if (!formData.category.trim()) errors.category = 'Category is required'
     if (!formData.description.trim()) errors.description = 'Description is required'
@@ -112,15 +138,18 @@ export function RequisitionForm({ initialData, isEditing = false, onCancel }: Re
   }
 
   const save = async (mode: 'draft' | 'submit') => {
-    if (!validateForm()) return
+    if (!validateForm(mode)) return
     setPending(mode)
+
+    // Self-reimbursements default the payee name to the requester
+    const body = { ...formData, ...payee, payeeName: payee.payeeType === 'SELF' ? payee.payeeName || user?.name || null : payee.payeeName }
 
     try {
       let requisitionId = initialData?.id
       if (isEditing && requisitionId) {
-        await request(`/api/requisitions/${requisitionId}`, 'PATCH', formData)
+        await request(`/api/requisitions/${requisitionId}`, 'PATCH', body)
       } else {
-        const created = await request('/api/requisitions', 'POST', formData)
+        const created = await request('/api/requisitions', 'POST', body)
         requisitionId = created.id as string
       }
 
@@ -267,6 +296,62 @@ export function RequisitionForm({ initialData, isEditing = false, onCancel }: Re
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Landmark className="h-4 w-4" /> Payment details
+            </CardTitle>
+            <CardDescription>Where should the money go? Approvers confirm the method and assign someone to pay it.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label>Who is being paid?</Label>
+              <RadioGroup value={payee.payeeType ?? ''} onValueChange={value => setPayeeField('payeeType', value)} className="grid gap-2 sm:grid-cols-3">
+                {PAYEE_TYPE_KEYS.map(value => (
+                  <Label
+                    key={value}
+                    htmlFor={`payee-type-${value}`}
+                    className={cn(
+                      'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 font-normal transition-colors hover:bg-accent/50',
+                      payee.payeeType === value && 'border-primary bg-primary/5 ring-1 ring-primary'
+                    )}
+                  >
+                    <span className="flex items-center justify-between text-sm font-medium">
+                      {PAYEE_TYPES[value].label}
+                      <RadioGroupItem value={value} id={`payee-type-${value}`} />
+                    </span>
+                    <span className="text-xs text-muted-foreground">{PAYEE_TYPES[value].description}</span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="preferredPaymentMethod">Preferred payment method</Label>
+              <Select value={payee.preferredPaymentMethod || NO_PREFERENCE} onValueChange={value => setPayeeField('preferredPaymentMethod', value === NO_PREFERENCE ? '' : value)}>
+                <SelectTrigger id="preferredPaymentMethod" className="sm:w-80">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PREFERENCE}>No preference — approver decides</SelectItem>
+                  {PAYMENT_METHOD_KEYS.map(key => (
+                    <SelectItem key={key} value={key}>
+                      {PAYMENT_METHODS[key].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {payee.preferredPaymentMethod
+                  ? `${PAYMENT_METHODS[payee.preferredPaymentMethod as keyof typeof PAYMENT_METHODS]?.description}. These details are required to submit.`
+                  : 'Optional. Choose a method to add account details so finance can pay without chasing you.'}
+              </p>
+            </div>
+
+            <PayeeFields value={payee} onChange={setPayeeField} currency={formData.currency} errors={validationErrors} />
+          </CardContent>
+        </Card>
+
         {canAttach && (
           <Card>
             <CardHeader>
@@ -308,6 +393,14 @@ export function RequisitionForm({ initialData, isEditing = false, onCancel }: Re
               <div className="flex items-center justify-between gap-2">
                 <dt className="text-muted-foreground">Category</dt>
                 <dd className="truncate font-medium">{formData.category || '—'}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">Pay via</dt>
+                <dd className="truncate font-medium">{paymentMethodLabel(payee.preferredPaymentMethod) ?? '—'}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">Pay to</dt>
+                <dd className="truncate font-medium">{payeeDisplayName(payee, user?.name ?? undefined) ?? '—'}</dd>
               </div>
               {canAttach && (
                 <div className="flex items-center justify-between gap-2">

@@ -6,6 +6,7 @@ import { validateRequestBody, handleValidationError, ValidationError } from '@/l
 import { createRequisitionSchema, paginationSchema } from '@/lib/validation-schemas'
 import { NextRequest, NextResponse } from 'next/server'
 import { UserRole } from '@prisma/client'
+import { PAYEE_FIELDS, maskAccountNumber } from '@/lib/payment'
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,6 +55,12 @@ export async function POST(req: NextRequest) {
         currency: requisition.currency,
         urgencyLevel: requisition.urgencyLevel,
         businessJustification: requisition.businessJustification,
+        ...Object.fromEntries(
+          PAYEE_FIELDS.filter(field => requisition[field]).map(field => [
+            field,
+            field === 'payeeAccountNumber' ? maskAccountNumber(requisition[field]) : requisition[field],
+          ])
+        ),
       }
     )
 
@@ -104,13 +111,17 @@ export async function GET(req: NextRequest) {
       filters.status = status
     }
 
+    if (searchParams.get('assignee') === 'me') {
+      filters.paymentAssigneeId = session.user.id
+    }
+
     const search = searchParams.get('search')?.trim().slice(0, 100)
     if (search) {
       filters.search = search
     }
 
     const sort = searchParams.get('sort')
-    if (sort === 'newest' || sort === 'oldest' || sort === 'amount_desc' || sort === 'amount_asc') {
+    if (sort === 'newest' || sort === 'oldest' || sort === 'amount_desc' || sort === 'amount_asc' || sort === 'due_soonest') {
       filters.sort = sort
     }
 

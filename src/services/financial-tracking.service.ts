@@ -208,6 +208,7 @@ export class FinancialTrackingService {
         paymentMethod: data.paymentMethod,
         paymentReference,
         paymentComment: data.paymentComment || null,
+        paidById: userId,
         status: 'PAID',
       },
     })

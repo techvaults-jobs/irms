@@ -12,26 +12,42 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FieldError } from '@/components/auth/field-error'
+import { PayeeSummary } from '@/components/payments/payee-summary'
 import { PaymentReferenceGenerator } from '@/lib/payment-reference-generator'
+import { PAYMENT_METHODS, PAYMENT_METHOD_KEYS, hasPayeeDetails, paymentMethodLabel, toPaymentMethod, type PayeeDetails } from '@/lib/payment'
 import { cn, formatMoney, getApiErrorMessage, toNumber } from '@/lib/utils'
 
 interface PaymentRecordingFormProps {
   requisitionId: string
   approvedCost: string | number
   currency: string
+  /** Method the approver asked for; using another one requires a comment. */
+  approvedMethod?: string | null
+  payee?: PayeeDetails
+  submitterName?: string
+  instructions?: string | null
   onPaymentRecorded?: () => void
 }
 
-const METHODS = ['Bank Transfer', 'Check', 'Credit Card', 'Internal Transfer', 'Cash', 'Other']
 const VARIANCE_THRESHOLD = 0.1
 
-export function PaymentRecordingForm({ requisitionId, approvedCost, currency, onPaymentRecorded }: PaymentRecordingFormProps) {
+export function PaymentRecordingForm({
+  requisitionId,
+  approvedCost,
+  currency,
+  approvedMethod,
+  payee,
+  submitterName,
+  instructions,
+  onPaymentRecorded,
+}: PaymentRecordingFormProps) {
+  const instructedMethod = toPaymentMethod(approvedMethod)
   const [isLoading, setIsLoading] = useState(false)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
-    actualCostPaid: '',
+    actualCostPaid: toNumber(approvedCost) ? String(toNumber(approvedCost)) : '',
     paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'Bank Transfer',
+    paymentMethod: instructedMethod ?? toPaymentMethod(payee?.preferredPaymentMethod) ?? 'BANK_TRANSFER',
     paymentReference: PaymentReferenceGenerator.generate(),
     paymentComment: '',
   })
@@ -40,6 +56,8 @@ export function PaymentRecordingForm({ requisitionId, approvedCost, currency, on
   const actual = toNumber(formData.actualCostPaid)
   const variance = actual > 0 && approved > 0 ? (actual - approved) / approved : 0
   const exceedsThreshold = variance > VARIANCE_THRESHOLD
+  const methodDiffers = !!instructedMethod && formData.paymentMethod !== instructedMethod
+  const commentRequired = exceedsThreshold || methodDiffers
 
   const setField = (name: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }))
@@ -53,6 +71,8 @@ export function PaymentRecordingForm({ requisitionId, approvedCost, currency, on
     if (!formData.paymentDate) errors.paymentDate = 'Payment date is required'
     if (exceedsThreshold && !formData.paymentComment.trim()) {
       errors.paymentComment = 'Explain why the payment exceeds the approved cost by more than 10%'
+    } else if (methodDiffers && !formData.paymentComment.trim()) {
+      errors.paymentComment = `Explain why ${paymentMethodLabel(formData.paymentMethod)} was used instead of ${paymentMethodLabel(instructedMethod)}`
     }
     setValidationErrors(errors)
     return Object.keys(errors).length === 0
@@ -91,7 +111,28 @@ export function PaymentRecordingForm({ requisitionId, approvedCost, currency, on
           Approved amount: <span className="font-semibold text-foreground tabular-nums">{formatMoney(approved, currency)}</span>
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-6">
+        {(payee && hasPayeeDetails(payee)) || instructions ? (
+          <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Pay to</p>
+              {payee && <PayeeSummary payee={payee} submitterName={submitterName} revealed showPreferred={false} />}
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Approver&apos;s instructions</p>
+              <p className="text-sm">
+                {instructedMethod ? (
+                  <>
+                    Pay by <span className="font-medium">{paymentMethodLabel(instructedMethod)}</span>.
+                  </>
+                ) : (
+                  'No method specified.'
+                )}
+              </p>
+              {instructions && <p className="whitespace-pre-wrap text-sm text-muted-foreground">{instructions}</p>}
+            </div>
+          </div>
+        ) : null}
         <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2" noValidate>
           <div className="space-y-2">
             <Label htmlFor="actualCostPaid">Amount paid</Label>
@@ -129,9 +170,10 @@ export function PaymentRecordingForm({ requisitionId, approvedCost, currency, on
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {METHODS.map(method => (
+                {PAYMENT_METHOD_KEYS.map(method => (
                   <SelectItem key={method} value={method}>
-                    {method}
+                    {PAYMENT_METHODS[method].label}
+                    {method === instructedMethod && <span className="ml-1 text-muted-foreground">· instructed</span>}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -176,10 +218,18 @@ export function PaymentRecordingForm({ requisitionId, approvedCost, currency, on
               <AlertDescription>This payment exceeds the approved cost by more than 10%. A comment is required.</AlertDescription>
             </Alert>
           )}
+          {methodDiffers && (
+            <Alert variant="destructive" className="md:col-span-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                The approver asked for {paymentMethodLabel(instructedMethod)}. Using {paymentMethodLabel(formData.paymentMethod)} requires a comment.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="paymentComment">
-              Comment {!exceedsThreshold && <span className="font-normal text-muted-foreground">(optional)</span>}
+              Comment {!commentRequired && <span className="font-normal text-muted-foreground">(optional)</span>}
             </Label>
             <Textarea
               id="paymentComment"

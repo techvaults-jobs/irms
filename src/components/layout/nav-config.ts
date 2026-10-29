@@ -3,6 +3,7 @@ import {
   CheckSquare,
   FilePlus2,
   FileText,
+  HandCoins,
   LayoutDashboard,
   LucideIcon,
   PieChart,
@@ -17,7 +18,7 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   roles?: Role[]
-  badgeKey?: 'approvals' | 'pendingUsers' | 'notifications'
+  badgeKey?: 'approvals' | 'payments' | 'pendingUsers' | 'notifications'
   keywords?: string[]
 }
 
@@ -40,6 +41,14 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ['MANAGER', 'FINANCE', 'ADMIN'],
         badgeKey: 'approvals',
         keywords: ['queue', 'review'],
+      },
+      {
+        title: 'Payments',
+        href: '/payments',
+        icon: HandCoins,
+        roles: ['FINANCE', 'ADMIN'],
+        badgeKey: 'payments',
+        keywords: ['pay', 'disburse', 'transfer', 'payout'],
       },
       {
         title: 'Reports',
@@ -85,6 +94,7 @@ const TITLES: Record<string, string> = {
   new: 'New',
   edit: 'Edit',
   approvals: 'Approvals',
+  payments: 'Payments',
   reports: 'Reports',
   notifications: 'Notifications',
   settings: 'Settings',

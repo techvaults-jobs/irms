@@ -11,6 +11,20 @@ import {
   isValidStatusTransition,
   type RequisitionStatusType,
 } from '@/lib/status-transitions'
+import { PAYEE_FIELDS, payeeDetailsShape, payeeIssues, pickPayeeDetails } from '@/lib/payment'
+
+const PAYEE_SELECT = {
+  payeeType: true,
+  payeeName: true,
+  preferredPaymentMethod: true,
+  payeeBankName: true,
+  payeeAccountName: true,
+  payeeAccountNumber: true,
+  payeeBankCode: true,
+  payeePhone: true,
+  payeeEmail: true,
+  payeeNotes: true,
+} satisfies Record<(typeof PAYEE_FIELDS)[number], true>
 
 export const UrgencyLevel = {
   LOW: 'LOW',
@@ -30,6 +44,7 @@ export const createRequisitionSchema = z.object({
   currency: z.string().default('NGN'),
   urgencyLevel: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('MEDIUM'),
   businessJustification: z.string().min(1),
+  ...payeeDetailsShape,
 })
 
 export const updateRequisitionSchema = createRequisitionSchema.partial()
@@ -41,16 +56,18 @@ export interface RequisitionListFilters {
   status?: string
   submitterId?: string
   departmentId?: string
+  paymentAssigneeId?: string
   search?: string
 }
 
-export type RequisitionSort = 'newest' | 'oldest' | 'amount_desc' | 'amount_asc'
+export type RequisitionSort = 'newest' | 'oldest' | 'amount_desc' | 'amount_asc' | 'due_soonest'
 
 const REQUISITION_SORT_ORDER: Record<RequisitionSort, Prisma.RequisitionOrderByWithRelationInput> = {
   newest: { createdAt: 'desc' },
   oldest: { createdAt: 'asc' },
   amount_desc: { estimatedCost: 'desc' },
   amount_asc: { estimatedCost: 'asc' },
+  due_soonest: { paymentDueDate: { sort: 'asc', nulls: 'last' } },
 }
 
 function buildRequisitionWhere({ search, ...where }: RequisitionListFilters): Prisma.RequisitionWhereInput {
@@ -87,6 +104,16 @@ export class RequisitionService {
         currency: validated.currency,
         urgencyLevel: validated.urgencyLevel,
         businessJustification: validated.businessJustification,
+        payeeType: validated.payeeType ?? null,
+        payeeName: validated.payeeName ?? null,
+        preferredPaymentMethod: validated.preferredPaymentMethod ?? null,
+        payeeBankName: validated.payeeBankName ?? null,
+        payeeAccountName: validated.payeeAccountName ?? null,
+        payeeAccountNumber: validated.payeeAccountNumber ?? null,
+        payeeBankCode: validated.payeeBankCode ?? null,
+        payeePhone: validated.payeePhone ?? null,
+        payeeEmail: validated.payeeEmail ?? null,
+        payeeNotes: validated.payeeNotes ?? null,
         status: RequisitionStatus.DRAFT,
         submitterId,
         departmentId,
@@ -131,6 +158,9 @@ export class RequisitionService {
     if (validated.currency) updateData.currency = validated.currency
     if (validated.urgencyLevel) updateData.urgencyLevel = validated.urgencyLevel
     if (validated.businessJustification) updateData.businessJustification = validated.businessJustification
+    for (const field of PAYEE_FIELDS) {
+      if (validated[field] !== undefined) updateData[field] = validated[field]
+    }
 
     const updated = await prisma.requisition.update({
       where: { id: requisitionId },
@@ -166,6 +196,15 @@ export class RequisitionService {
         paymentReference: true,
         paymentDate: true,
         paymentComment: true,
+        ...PAYEE_SELECT,
+        approvedPaymentMethod: true,
+        paymentInstructions: true,
+        paymentDueDate: true,
+        paymentInstructedAt: true,
+        paymentAssigneeId: true,
+        paymentAssignee: { select: { id: true, name: true, email: true, role: true } },
+        paymentInstructedBy: { select: { id: true, name: true } },
+        paidBy: { select: { id: true, name: true } },
         createdAt: true,
         updatedAt: true,
         closedAt: true,
@@ -238,6 +277,14 @@ export class RequisitionService {
         urgencyLevel: true,
         createdAt: true,
         updatedAt: true,
+        payeeType: true,
+        payeeName: true,
+        payeeAccountName: true,
+        payeeBankName: true,
+        approvedPaymentMethod: true,
+        paymentDueDate: true,
+        paymentAssigneeId: true,
+        paymentAssignee: { select: { id: true, name: true } },
         submitter: {
           select: {
             id: true,
@@ -291,6 +338,13 @@ export class RequisitionService {
     // Validate all required fields are populated
     if (!requisition.title || !requisition.description || !requisition.businessJustification) {
       throw new Error('Missing required fields')
+    }
+
+    const payeeProblems = Object.values(
+      payeeIssues(pickPayeeDetails(requisition), requisition.preferredPaymentMethod, requisition.currency)
+    )
+    if (payeeProblems.length) {
+      throw new Error(`Payment details are incomplete: ${payeeProblems.join('. ')}`)
     }
 
     const updated = await prisma.requisition.update({

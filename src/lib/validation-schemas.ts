@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { sanitizeString, sanitizeEmail } from './input-sanitization'
+import { PAYMENT_METHOD_KEYS, payeeDetailsShape, paymentInstructionsShape } from './payment'
 
 /**
  * Validation Schemas for all API inputs
@@ -40,6 +41,7 @@ export const createRequisitionSchema = z.object({
     .min(1, 'Business justification is required')
     .max(5000, 'Business justification must be 5000 characters or less')
     .transform(sanitizeString),
+  ...payeeDetailsShape,
 })
 
 export const updateRequisitionSchema = createRequisitionSchema.partial()
@@ -86,6 +88,12 @@ export const approveRequisitionSchema = z.object({
       const num = typeof val === 'string' ? parseFloat(val) : val
       return !isNaN(num) && num > 0
     }, 'Approved cost must be a positive number'),
+  // Required when this approval completes the workflow (checked in the route)
+  approvedPaymentMethod: paymentInstructionsShape.approvedPaymentMethod.optional(),
+  paymentAssigneeId: z.string().min(1).optional(),
+  paymentDueDate: paymentInstructionsShape.paymentDueDate,
+  paymentInstructions: paymentInstructionsShape.paymentInstructions,
+  payee: paymentInstructionsShape.payee,
 })
 
 export const rejectRequisitionSchema = z.object({
@@ -110,10 +118,9 @@ export const paymentRecordingSchema = z.object({
       const date = val instanceof Date ? val : new Date(val)
       return !isNaN(date.getTime())
     }, 'Payment date must be a valid date'),
-  paymentMethod: z.string()
-    .min(1, 'Payment method is required')
-    .max(100, 'Payment method must be 100 characters or less')
-    .transform(sanitizeString),
+  paymentMethod: z.enum(PAYMENT_METHOD_KEYS, {
+    errorMap: () => ({ message: 'Choose a valid payment method' }),
+  }),
   paymentReference: z.string()
     .max(255, 'Payment reference must be 255 characters or less')
     .optional()

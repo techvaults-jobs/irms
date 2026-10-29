@@ -10,6 +10,7 @@ import {
   Building2,
   CalendarDays,
   Copy,
+  HandCoins,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -39,6 +40,8 @@ import { FinancialSummary } from './FinancialSummary'
 import { PaymentRecordingForm } from './PaymentRecordingForm'
 import { AuditTrailViewer } from './AuditTrailViewer'
 import { ApprovalActions } from './ApprovalActions'
+import { PaymentPlanCard, dueState } from '@/components/payments/payment-plan-card'
+import { pickPayeeDetails } from '@/lib/payment'
 import { useAuth } from '@/hooks/useAuth'
 import { useCSRFToken, addCSRFTokenToRequest } from '@/hooks/useCSRFToken'
 import { notifyCountsChanged } from '@/hooks/useNavCounts'
@@ -56,7 +59,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
   const [requisition, setRequisition] = useState<any>(null)
   const [attachments, setAttachments] = useState<AttachmentView[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(() => searchParams?.get('tab') ?? 'overview')
   const [showDelete, setShowDelete] = useState(false)
   const [showSubmit, setShowSubmit] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -122,7 +125,11 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
       nextStep.assignedUserId === user?.id ||
       (!nextStep.assignedUserId && nextStep.requiredRole === user?.role))
   const canApprove = inReview && isMyTurn && ['MANAGER', 'FINANCE', 'ADMIN'].includes(user?.role ?? '')
-  const canRecordPayment = requisition.status === 'APPROVED' && (user?.role === 'FINANCE' || isAdmin)
+  const isPayer = !!user && requisition.paymentAssigneeId === user.id
+  // Once a payer is assigned only they, or an admin, can record the payment
+  const canRecordPayment =
+    requisition.status === 'APPROVED' && (isAdmin || (user?.role === 'FINANCE' && (!requisition.paymentAssigneeId || isPayer)))
+  const due = dueState(requisition.paymentDueDate, requisition.status)
   const isDraft = requisition.status === 'DRAFT'
   const canSubmit = isDraft && (isOwner || isAdmin)
   const canManageAttachments = isDraft && (isOwner || user?.role !== 'STAFF')
@@ -223,6 +230,28 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
         />
       )}
 
+      {requisition.status === 'APPROVED' && isPayer && (
+        <Card className="border-primary/30 bg-gradient-to-r from-primary/[0.06] to-transparent">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <HandCoins className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold">You&apos;ve been asked to make this payment</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatMoney(requisition.approvedCost ?? requisition.estimatedCost, requisition.currency)}
+                  {due && ` · ${due.label}`}
+                </p>
+              </div>
+            </div>
+            <Button onClick={() => setTab('payment')}>
+              <HandCoins /> Record payment
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {requisition.status === 'REJECTED' && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -240,7 +269,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <Tabs value={tab} onValueChange={setTab} className="min-w-0">
+        <Tabs value={tab === 'payment' && !canRecordPayment ? 'overview' : tab} onValueChange={setTab} className="min-w-0">
           <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="financials">Financials</TabsTrigger>
@@ -249,7 +278,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="mt-4">
+          <TabsContent value="overview" className="mt-4 space-y-4">
             <Card>
               <CardContent className="space-y-6 p-6">
                 <Section title="Description">{requisition.description}</Section>
@@ -257,6 +286,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
                 <Section title="Business justification">{requisition.businessJustification}</Section>
               </CardContent>
             </Card>
+            <PaymentPlanCard requisition={requisition} viewer={user ? { id: user.id, role: user.role } : null} onChange={load} />
           </TabsContent>
 
           <TabsContent value="financials" className="mt-4">
@@ -270,6 +300,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
               paymentReference={requisition.paymentReference}
               paymentDate={requisition.paymentDate}
               paymentComment={requisition.paymentComment}
+              paidBy={requisition.paidBy?.name}
             />
           </TabsContent>
 
@@ -279,7 +310,12 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
                 requisitionId={requisitionId}
                 approvedCost={requisition.approvedCost || requisition.estimatedCost}
                 currency={requisition.currency}
+                approvedMethod={requisition.approvedPaymentMethod}
+                payee={pickPayeeDetails(requisition)}
+                submitterName={requisition.submitter?.name}
+                instructions={requisition.paymentInstructions}
                 onPaymentRecorded={async () => {
+                  notifyCountsChanged()
                   await load()
                   setTab('financials')
                 }}
@@ -329,6 +365,7 @@ export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
               <DetailRow icon={Tag} label="Category" value={requisition.category} />
               <DetailRow icon={CalendarDays} label="Created" value={formatDate(requisition.createdAt, true)} />
               <DetailRow icon={CalendarDays} label="Last updated" value={formatDate(requisition.updatedAt, true)} />
+              {requisition.paymentDueDate && <DetailRow icon={CalendarDays} label="Pay by" value={formatDate(requisition.paymentDueDate)} />}
               {requisition.paymentDate && <DetailRow icon={CalendarDays} label="Paid on" value={formatDate(requisition.paymentDate)} />}
             </CardContent>
           </Card>

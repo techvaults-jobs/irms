@@ -7,6 +7,7 @@ import { validateRequestBody, handleValidationError, ValidationError } from '@/l
 import { paymentRecordingSchema } from '@/lib/validation-schemas'
 import { NextRequest, NextResponse } from 'next/server'
 import { UserRole } from '@prisma/client'
+import { paymentMethodLabel } from '@/lib/payment'
 
 export async function POST(
   req: NextRequest,
@@ -61,6 +62,27 @@ export async function POST(
       )
     }
 
+    // Once a payer has been assigned, only they (or an admin) can record the payment
+    if (userRole !== 'ADMIN' && requisition.paymentAssigneeId && requisition.paymentAssigneeId !== session.user.id) {
+      return NextResponse.json(
+        { error: `This payment is assigned to ${requisition.paymentAssignee?.name ?? 'another user'}` },
+        { status: 403 }
+      )
+    }
+
+    if (
+      requisition.approvedPaymentMethod &&
+      paymentData.paymentMethod !== requisition.approvedPaymentMethod &&
+      !paymentData.paymentComment
+    ) {
+      return NextResponse.json(
+        {
+          error: `The approver asked for payment by ${paymentMethodLabel(requisition.approvedPaymentMethod)}. Add a comment explaining why a different method was used.`,
+        },
+        { status: 400 }
+      )
+    }
+
     // Record payment
     const paid = await FinancialTrackingService.recordPayment(
       params.id,
@@ -87,9 +109,9 @@ export async function POST(
     try {
       const amountPaid = new Intl.NumberFormat('en-NG', {
         style: 'currency',
-        currency: 'NGN',
+        currency: requisition.currency || 'NGN',
         minimumFractionDigits: 0,
-      }).format(Number(paymentData.amountPaid))
+      }).format(Number(paymentData.actualCostPaid))
 
       await NotificationTriggersService.triggerPaymentNotifications(
         params.id,

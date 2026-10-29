@@ -3,6 +3,7 @@
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { paymentMethodLabel } from '@/lib/payment'
 import { cn, formatDate, formatMoney, toNumber } from '@/lib/utils'
 
 interface FinancialSummaryProps {
@@ -15,6 +16,7 @@ interface FinancialSummaryProps {
   paymentReference?: string | null
   paymentDate?: string | null
   paymentComment?: string | null
+  paidBy?: string | null
 }
 
 function paymentState(status: string) {
@@ -34,6 +36,7 @@ export function FinancialSummary({
   paymentReference,
   paymentDate,
   paymentComment,
+  paidBy,
 }: FinancialSummaryProps) {
   const estimated = toNumber(estimatedCost)
   const approved = approvedCost != null ? toNumber(approvedCost) : null
@@ -99,7 +102,8 @@ export function FinancialSummary({
         <CardContent>
           <dl className="space-y-3 text-sm">
             {[
-              { label: 'Method', value: paymentMethod },
+              { label: 'Method', value: paymentMethodLabel(paymentMethod) },
+              { label: 'Paid by', value: paidBy },
               { label: 'Reference', value: paymentReference, mono: true },
               { label: 'Date', value: paymentDate ? formatDate(paymentDate) : null },
               { label: 'Note', value: paymentComment },

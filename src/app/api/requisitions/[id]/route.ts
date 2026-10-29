@@ -3,6 +3,7 @@ import { RequisitionService } from '@/services/requisition.service'
 import { AuditTrailService } from '@/services/audit-trail.service'
 import { NextRequest, NextResponse } from 'next/server'
 import { UserRole } from '@prisma/client'
+import { maskAccountNumber } from '@/lib/payment'
 
 export async function GET(
   req: NextRequest,
@@ -100,13 +101,14 @@ export async function PATCH(
     // Record field updates in audit trail
     for (const [key, value] of Object.entries(body)) {
       const previousValue = (requisition as any)[key]
-      if (previousValue !== value) {
+      if ((previousValue ?? null) !== ((value as any) || null)) {
+        const mask = key === 'payeeAccountNumber' ? maskAccountNumber : (v: any) => v
         await AuditTrailService.recordFieldUpdate(
           params.id,
           session.user.id,
           key,
-          previousValue,
-          value
+          mask(previousValue),
+          mask(value as any)
         )
       }
     }

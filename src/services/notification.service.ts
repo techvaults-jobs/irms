@@ -6,6 +6,7 @@ export const NotificationType = {
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
   PAID: 'PAID',
+  PAYMENT_ASSIGNED: 'PAYMENT_ASSIGNED',
   REMINDER: 'REMINDER',
 } as const
 
