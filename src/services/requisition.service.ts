@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { ReportingService } from './reporting.service'
+import { allowAuditTrailDeletes } from './user-deletion'
 import { Decimal } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 import { ReferentialIntegrityChecker } from '@/lib/referential-integrity'
@@ -453,9 +454,13 @@ export class RequisitionService {
       throw new Error('Requisition not found')
     }
 
-    // Delete the requisition (cascading deletes will handle related records)
-    await prisma.requisition.delete({
-      where: { id: requisitionId },
+    // Delete the requisition (cascading deletes will handle related records,
+    // including its audit trail, which the immutability trigger must allow)
+    await prisma.$transaction(async tx => {
+      await allowAuditTrailDeletes(tx)
+      await tx.requisition.delete({
+        where: { id: requisitionId },
+      })
     })
 
     // Invalidate report cache

@@ -54,7 +54,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Account',
     items: [
       { title: 'Notifications', href: '/notifications', icon: Bell, badgeKey: 'notifications', keywords: ['inbox', 'alerts'] },
-      { title: 'Settings', href: '/settings', icon: Settings, keywords: ['preferences', 'profile', 'rules'] },
+      { title: 'Settings', href: '/settings', icon: Settings, keywords: ['preferences', 'profile', 'rules', 'password', 'security'] },
     ],
   },
   {

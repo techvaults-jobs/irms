@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronsUpDown, LogOut, Moon, Settings, Sun } from 'lucide-react'
+import { ChevronsUpDown, KeyRound, LogOut, Moon, Settings, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import {
   Sidebar,
@@ -126,6 +126,11 @@ export function AppSidebar({ counts }: AppSidebarProps) {
                 <DropdownMenuItem asChild>
                   <Link href="/settings">
                     <Settings /> Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings?tab=security">
+                    <KeyRound /> Change password
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>

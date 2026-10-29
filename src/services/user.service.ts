@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { AccountStatus, Prisma, UserRole } from '@prisma/client'
 import { AuditTrailService } from './audit-trail.service'
 import { ReferentialIntegrityChecker } from '@/lib/referential-integrity'
+import { getUserDeletionImpact, purgeUsers } from './user-deletion'
 import bcrypt from 'bcryptjs'
 
 /**
@@ -41,6 +42,7 @@ export interface ListUsersFilters {
 }
 
 export class AccountExistsError extends Error {}
+export class InvalidPasswordError extends Error {}
 
 export interface CreateUserInput {
   email: string
@@ -200,6 +202,90 @@ export class UserService {
         rejectionReason: reason,
       },
       select: publicUserSelect,
+    })
+  }
+
+  /**
+   * Preview what permanently deleting a user would remove.
+   */
+  static async getDeletionImpact(userId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!user) {
+      throw new Error('User not found')
+    }
+    const impact = await getUserDeletionImpact(prisma, [userId])
+    return {
+      requisitions: impact.requisitions,
+      attachments: impact.attachments.length,
+      authoredAuditEntries: impact.authoredAuditEntries,
+      approvalAssignments: impact.approvalAssignments,
+    }
+  }
+
+  /**
+   * Permanently delete a user and the data they own. Admins cannot delete
+   * themselves, and the last active admin cannot be deleted.
+   */
+  static async deleteUserPermanently(userId: string, adminId: string) {
+    if (userId === adminId) {
+      throw new Error('You cannot delete your own account')
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, role: true },
+    })
+    if (!user) {
+      throw new Error('User not found')
+    }
+
+    if (user.role === 'ADMIN') {
+      const otherAdmins = await prisma.user.count({
+        where: { role: 'ADMIN', isActive: true, accountStatus: 'APPROVED', id: { not: userId } },
+      })
+      if (otherAdmins === 0) {
+        throw new Error('You cannot delete the last active admin')
+      }
+    }
+
+    const impact = await getUserDeletionImpact(prisma, [userId])
+    await purgeUsers(prisma, [userId])
+
+    // Best effort: the database is already clean, so a storage failure only
+    // leaves an orphaned file behind.
+    let filesNotDeleted = 0
+    if (impact.attachments.length > 0) {
+      const { deleteFile } = await import('./file-storage.service')
+      const fileResults = await Promise.allSettled(impact.attachments.map(url => deleteFile(url)))
+      filesNotDeleted = fileResults.filter(r => r.status === 'rejected').length
+    }
+
+    return {
+      email: user.email,
+      name: user.name,
+      requisitions: impact.requisitions,
+      attachments: impact.attachments.length,
+      filesNotDeleted,
+    }
+  }
+
+  /**
+   * Change a user's own password after verifying the current one.
+   */
+  static async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { password: true } })
+    if (!user) {
+      throw new Error('User not found')
+    }
+
+    const matches = await bcrypt.compare(currentPassword, user.password)
+    if (!matches) {
+      throw new InvalidPasswordError('Your current password is incorrect')
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: await bcrypt.hash(newPassword, 10) },
     })
   }
 

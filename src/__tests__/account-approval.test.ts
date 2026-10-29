@@ -7,7 +7,7 @@
 
 import bcrypt from 'bcryptjs'
 import { AccountExistsError, UserService } from '@/services/user.service'
-import { registerUserSchema } from '@/lib/validation-schemas'
+import { changePasswordSchema, registerUserSchema } from '@/lib/validation-schemas'
 import { prisma } from '@/lib/prisma'
 
 const unique = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -202,5 +202,114 @@ describe('Account approval workflow', () => {
       expect(after.pending).toBe(before.pending + 1)
       expect(after.total).toBe(before.total + 1)
     })
+  })
+})
+
+describe('Permanent user deletion and password change', () => {
+  let departmentId: string
+  let adminId: string
+  const cleanup: string[] = []
+
+  const makeUser = async (role: 'STAFF' | 'ADMIN' = 'STAFF', password = 'Original123') => {
+    const user = await prisma.user.create({
+      data: {
+        email: `del-${unique()}@example.com`,
+        name: 'Disposable User',
+        password: await bcrypt.hash(password, 4),
+        role,
+        departmentId,
+      },
+    })
+    cleanup.push(user.id)
+    return user
+  }
+
+  beforeAll(async () => {
+    departmentId = (await prisma.department.create({ data: { name: `del-dept-${unique()}` } })).id
+    adminId = (await makeUser('ADMIN')).id
+  })
+
+  afterAll(async () => {
+    await prisma.user.deleteMany({ where: { id: { in: cleanup } } })
+    await prisma.department.deleteMany({ where: { id: departmentId } })
+  })
+
+  it('deletes a user together with their requisitions and audit trail', async () => {
+    const staff = await makeUser()
+    const requisition = await prisma.requisition.create({
+      data: {
+        title: 'To be deleted',
+        category: 'Test',
+        description: 'x',
+        estimatedCost: 100,
+        businessJustification: 'x',
+        submitterId: staff.id,
+        departmentId,
+      },
+    })
+    await prisma.auditTrail.create({
+      data: { requisitionId: requisition.id, userId: staff.id, changeType: 'CREATED' },
+    })
+
+    const impact = await UserService.getDeletionImpact(staff.id)
+    expect(impact.requisitions).toBe(1)
+
+    const result = await UserService.deleteUserPermanently(staff.id, adminId)
+
+    expect(result.requisitions).toBe(1)
+    expect(await prisma.user.findUnique({ where: { id: staff.id } })).toBeNull()
+    expect(await prisma.requisition.findUnique({ where: { id: requisition.id } })).toBeNull()
+    expect(await prisma.auditTrail.count({ where: { userId: staff.id } })).toBe(0)
+  })
+
+  it('keeps audit trail rows protected outside a permanent delete', async () => {
+    const staff = await makeUser()
+    const requisition = await prisma.requisition.create({
+      data: { title: 'Kept', category: 'Test', description: 'x', estimatedCost: 1, businessJustification: 'x', submitterId: staff.id, departmentId },
+    })
+    await prisma.auditTrail.create({ data: { requisitionId: requisition.id, userId: staff.id, changeType: 'CREATED' } })
+
+    await expect(prisma.auditTrail.deleteMany({ where: { userId: staff.id } })).rejects.toThrow('immutable')
+
+    await UserService.deleteUserPermanently(staff.id, adminId)
+  })
+
+  it('refuses to delete your own account', async () => {
+    await expect(UserService.deleteUserPermanently(adminId, adminId)).rejects.toThrow('your own account')
+  })
+
+  it('refuses to delete the last active admin', async () => {
+    const otherAdmin = await makeUser('ADMIN')
+    const activeAdmins = await prisma.user.findMany({
+      where: { role: 'ADMIN', isActive: true, accountStatus: 'APPROVED', id: { not: otherAdmin.id } },
+      select: { id: true },
+    })
+    // Temporarily make otherAdmin the only active admin
+    await prisma.user.updateMany({ where: { id: { in: activeAdmins.map(a => a.id) } }, data: { isActive: false } })
+    try {
+      await expect(UserService.deleteUserPermanently(otherAdmin.id, adminId)).rejects.toThrow('last active admin')
+    } finally {
+      await prisma.user.updateMany({ where: { id: { in: activeAdmins.map(a => a.id) } }, data: { isActive: true } })
+    }
+  })
+
+  it('changes the password when the current one is correct', async () => {
+    const staff = await makeUser('STAFF', 'Original123')
+    await UserService.changePassword(staff.id, 'Original123', 'Brandnew456')
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: staff.id } })
+    expect(await bcrypt.compare('Brandnew456', stored.password)).toBe(true)
+  })
+
+  it('rejects a wrong current password and leaves the password unchanged', async () => {
+    const staff = await makeUser('STAFF', 'Original123')
+    await expect(UserService.changePassword(staff.id, 'Wrong12345', 'Brandnew456')).rejects.toThrow('incorrect')
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id: staff.id } })
+    expect(await bcrypt.compare('Original123', stored.password)).toBe(true)
+  })
+
+  it('requires a different, policy-compliant new password', () => {
+    expect(changePasswordSchema.safeParse({ currentPassword: 'Same12345', newPassword: 'Same12345' }).success).toBe(false)
+    expect(changePasswordSchema.safeParse({ currentPassword: 'Old12345', newPassword: 'short1' }).success).toBe(false)
+    expect(changePasswordSchema.safeParse({ currentPassword: 'Old12345', newPassword: 'Newer12345' }).success).toBe(true)
   })
 })

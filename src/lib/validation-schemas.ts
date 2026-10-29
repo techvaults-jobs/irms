@@ -185,6 +185,16 @@ export const registerUserSchema = z.object({
     .transform(val => val || undefined),
 })
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password'),
+    newPassword: passwordPolicy,
+  })
+  .refine(data => data.currentPassword !== data.newPassword, {
+    message: 'New password must be different from your current password',
+    path: ['newPassword'],
+  })
+
 export const approveAccountSchema = z.object({
   role: z.enum(['STAFF', 'MANAGER', 'FINANCE', 'ADMIN']).default('STAFF'),
   departmentId: z.string().min(1).optional(),

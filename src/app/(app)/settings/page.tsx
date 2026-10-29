@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { BellRing, Building2, Loader2, Mail, Save, ShieldCheck, Smartphone, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ import { PageHeader } from '@/components/shared/page-header'
 import { StatusBadge } from '@/components/shared/status-badge'
 import { UserAvatar } from '@/components/shared/user-avatar'
 import { ApprovalRuleConfig } from '@/components/ApprovalRuleConfig'
+import { ChangePasswordCard } from '@/components/settings/change-password-card'
 import { useAuth } from '@/hooks/useAuth'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { ROLES } from '@/lib/status'
@@ -33,21 +35,40 @@ const PREFERENCE_ITEMS: { key: keyof Preferences; title: string; description: st
   { key: 'systemAlerts', title: 'System alerts', description: 'Important notices about IRMS itself.' },
 ]
 
+const TABS = ['profile', 'security', 'notifications', 'workflow']
+
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+      <SettingsContent />
+    </Suspense>
+  )
+}
+
+function SettingsContent() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const requested = searchParams.get('tab') ?? 'profile'
+  const tab = TABS.includes(requested) && (requested !== 'workflow' || isAdmin) ? requested : 'profile'
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="Manage your profile, notifications and system configuration." />
-      <Tabs defaultValue="profile">
+      <PageHeader title="Settings" description="Manage your profile, password, notifications and system configuration." />
+      <Tabs value={tab} onValueChange={value => router.replace(`${pathname}?tab=${value}`, { scroll: false })}>
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           {isAdmin && <TabsTrigger value="workflow">Approval workflow</TabsTrigger>}
         </TabsList>
         <TabsContent value="profile" className="mt-4">
           <ProfileCard />
+        </TabsContent>
+        <TabsContent value="security" className="mt-4">
+          <ChangePasswordCard />
         </TabsContent>
         <TabsContent value="notifications" className="mt-4 space-y-4">
           <PreferencesCard />

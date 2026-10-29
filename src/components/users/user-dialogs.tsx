@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Check, Copy, KeyRound, Loader2, RefreshCw, UserCheck, UserX } from 'lucide-react'
+import { Check, Copy, KeyRound, Loader2, RefreshCw, Trash2, UserCheck, UserX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -273,6 +273,109 @@ export function RejectUserDialog({
           <Button variant="destructive" onClick={reject} disabled={saving}>
             {saving && <Loader2 className="animate-spin" />}
             Reject request
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface DeletionImpact {
+  requisitions: number
+  attachments: number
+  authoredAuditEntries: number
+  approvalAssignments: number
+}
+
+export function DeleteUserDialog({
+  user,
+  onOpenChange,
+  onDone,
+}: {
+  user: ManagedUser | null
+  onOpenChange: (open: boolean) => void
+  onDone: () => void
+}) {
+  const [impact, setImpact] = useState<DeletionImpact | null>(null)
+  const [confirmText, setConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    setImpact(null)
+    setConfirmText('')
+    apiFetch<DeletionImpact>(`/api/users/${user.id}/permanent`)
+      .then(setImpact)
+      .catch(err => toast.error(err instanceof Error ? err.message : 'Failed to load user'))
+  }, [user])
+
+  const confirmed = !!user && confirmText.trim().toLowerCase() === user.email.toLowerCase()
+
+  const remove = async () => {
+    if (!user || !confirmed) return
+    setDeleting(true)
+    try {
+      const result = await apiFetch<{ filesNotDeleted: number }>(`/api/users/${user.id}/permanent`, { method: 'DELETE' })
+      toast.success(`${user.name} was permanently deleted`, {
+        description: result.filesNotDeleted ? `${result.filesNotDeleted} attachment file(s) could not be removed from storage.` : undefined,
+      })
+      onDone()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete user')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const items = impact
+    ? [
+        `${impact.requisitions} requisition${impact.requisitions === 1 ? '' : 's'} they submitted, with approval history and activity`,
+        `${impact.attachments} attachment${impact.attachments === 1 ? '' : 's'}`,
+        ...(impact.authoredAuditEntries ? [`${impact.authoredAuditEntries} activity entries they made on other requisitions`] : []),
+        ...(impact.approvalAssignments ? [`They will be unassigned from ${impact.approvalAssignments} approval step(s)`] : []),
+        'Their notifications, preferences and push subscriptions',
+      ]
+    : []
+
+  return (
+    <Dialog open={!!user} onOpenChange={open => !deleting && onOpenChange(open)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Trash2 className="h-5 w-5 text-destructive" /> Delete account permanently
+          </DialogTitle>
+          <DialogDescription>This cannot be undone. To keep their history, deactivate the account instead.</DialogDescription>
+        </DialogHeader>
+        {user && (
+          <div className="space-y-4">
+            <ApplicantSummary user={user} />
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+              <p className="mb-2 font-medium">This will also delete:</p>
+              {impact ? (
+                <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                  {items.map(item => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="delete-confirm">
+                Type <span className="font-mono text-foreground">{user.email}</span> to confirm
+              </Label>
+              <Input id="delete-confirm" value={confirmText} onChange={e => setConfirmText(e.target.value)} autoComplete="off" />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={remove} disabled={!confirmed || !impact || deleting}>
+            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+            Delete permanently
           </Button>
         </DialogFooter>
       </DialogContent>

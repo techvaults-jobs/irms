@@ -14,6 +14,7 @@ import {
   Pencil,
   Phone,
   Search,
+  Trash2,
   UserCheck,
   UserMinus,
   UserPlus,
@@ -42,7 +43,7 @@ import { UserAvatar } from '@/components/shared/user-avatar'
 import { EmptyState } from '@/components/shared/empty-state'
 import { PaginationBar } from '@/components/shared/pagination-bar'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
-import { ApproveUserDialog, Department, ManagedUser, RejectUserDialog, UserFormDialog } from '@/components/users/user-dialogs'
+import { ApproveUserDialog, DeleteUserDialog, Department, ManagedUser, RejectUserDialog, UserFormDialog } from '@/components/users/user-dialogs'
 import { useAuth } from '@/hooks/useAuth'
 import { notifyCountsChanged } from '@/hooks/useNavCounts'
 import { ROLES, ROLE_ORDER } from '@/lib/status'
@@ -83,6 +84,7 @@ export function UserManagement() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<ManagedUser | null>(null)
   const [toggling, setToggling] = useState<ManagedUser | null>(null)
+  const [deleting, setDeleting] = useState<ManagedUser | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -274,6 +276,9 @@ export function UserManagement() {
                     <Button variant="outline" className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setRejecting(u)}>
                       <X /> Reject
                     </Button>
+                    <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleting(u)} aria-label={`Delete ${u.name} permanently`}>
+                      <Trash2 />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -376,13 +381,22 @@ export function UserManagement() {
                                       {u.isActive ? <UserMinus /> : <UserCheck />}
                                       {u.isActive ? 'Deactivate' : 'Reactivate'}
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleting(u)}>
+                                      <Trash2 /> Delete permanently
+                                    </DropdownMenuItem>
                                   </>
                                 )}
                               </>
                             ) : (
-                              <DropdownMenuItem onClick={() => setApproving(u)}>
-                                <UserCheck /> Approve anyway
-                              </DropdownMenuItem>
+                              <>
+                                <DropdownMenuItem onClick={() => setApproving(u)}>
+                                  <UserCheck /> Approve anyway
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleting(u)}>
+                                  <Trash2 /> Delete permanently
+                                </DropdownMenuItem>
+                              </>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -429,6 +443,14 @@ export function UserManagement() {
             setFormOpen(false)
             setEditing(null)
           }
+          refresh()
+        }}
+      />
+      <DeleteUserDialog
+        user={deleting}
+        onOpenChange={open => !open && setDeleting(null)}
+        onDone={() => {
+          setDeleting(null)
           refresh()
         }}
       />
