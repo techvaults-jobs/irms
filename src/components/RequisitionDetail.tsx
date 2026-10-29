@@ -1,514 +1,406 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { AlertCircle, Download, FileText } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
+import {
+  AlertCircle,
+  ArrowLeft,
+  Building2,
+  CalendarDays,
+  Copy,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Send,
+  Tag,
+  Trash2,
+} from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { StatusBadge } from '@/components/shared/status-badge'
+import { UserAvatar } from '@/components/shared/user-avatar'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { ApprovalProgress, ApprovalStepView } from '@/components/requisitions/approval-progress'
+import { AttachmentsPanel, AttachmentView } from '@/components/attachments/attachments-panel'
 import { FinancialSummary } from './FinancialSummary'
 import { PaymentRecordingForm } from './PaymentRecordingForm'
 import { AuditTrailViewer } from './AuditTrailViewer'
 import { ApprovalActions } from './ApprovalActions'
-import { ConfirmationModal } from './ConfirmationModal'
 import { useAuth } from '@/hooks/useAuth'
-import { formatCurrency } from '@/lib/utils'
-import { useSearchParams } from 'next/navigation'
-
-interface Attachment {
-  id: string
-  fileName: string
-  fileSize: number
-  uploadedAt: string
-}
-
-interface AuditEntry {
-  id: string
-  changeType: string
-  fieldName?: string
-  previousValue?: string
-  newValue?: string
-  timestamp: string
-  user?: {
-    name: string
-    email: string
-  }
-}
-
-interface ApprovalStep {
-  id: string
-  stepNumber: number
-  requiredRole: string
-  status: string
-  approverComment?: string
-  approvedAt?: string
-  assignedUser?: {
-    name: string
-    email: string
-  }
-}
+import { useCSRFToken, addCSRFTokenToRequest } from '@/hooks/useCSRFToken'
+import { notifyCountsChanged } from '@/hooks/useNavCounts'
+import { asList, formatDate, formatMoney, getApiErrorMessage } from '@/lib/utils'
 
 interface RequisitionDetailProps {
   requisitionId: string
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  SUBMITTED: 'bg-info-100 text-info-800',
-  UNDER_REVIEW: 'bg-yellow-100 text-yellow-800',
-  APPROVED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  PAID: 'bg-purple-100 text-purple-800',
-  CLOSED: 'bg-gray-200 text-gray-900',
 }
 
 export function RequisitionDetail({ requisitionId }: RequisitionDetailProps) {
   const { user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const csrfToken = useCSRFToken()
   const [requisition, setRequisition] = useState<any>(null)
-  const [auditTrail, setAuditTrail] = useState<AuditEntry[]>([])
-  const [attachments, setAttachments] = useState<Attachment[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [attachments, setAttachments] = useState<AttachmentView[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'attachments' | 'financial' | 'payment' | 'approval'>('details')
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [tab, setTab] = useState('overview')
+  const [showDelete, setShowDelete] = useState(false)
+  const [showSubmit, setShowSubmit] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [activityKey, setActivityKey] = useState(0)
 
-  useEffect(() => {
-    fetchRequisitionDetails()
+  const load = useCallback(async () => {
+    try {
+      const [reqResponse, attachResponse] = await Promise.all([
+        fetch(`/api/requisitions/${requisitionId}`),
+        fetch(`/api/requisitions/${requisitionId}/attachments`),
+      ])
+      if (!reqResponse.ok) {
+        throw new Error(reqResponse.status === 403 ? "You don't have access to this requisition" : 'Requisition not found')
+      }
+      setRequisition(await reqResponse.json())
+      setAttachments(attachResponse.ok ? asList<AttachmentView>(await attachResponse.json()) : [])
+      setActivityKey(k => k + 1)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load requisition')
+    }
   }, [requisitionId])
 
-  // Handle URL query parameters for direct approve/reject actions
   useEffect(() => {
-    const action = searchParams?.get('action')
-    if (action === 'approve' || action === 'reject') {
-      // Scroll to approval section when action parameter is present
-      setTimeout(() => {
-        const approvalSection = document.getElementById('approval-actions-section')
-        if (approvalSection) {
-          approvalSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
-      }, 500)
-    }
-  }, [searchParams])
-
-  const fetchRequisitionDetails = async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      // Fetch requisition details
-      const reqResponse = await fetch(`/api/requisitions/${requisitionId}`)
-      if (!reqResponse.ok) {
-        throw new Error('Failed to fetch requisition')
-      }
-      const reqData = await reqResponse.json()
-      setRequisition(reqData)
-
-      // Fetch audit trail
-      const auditResponse = await fetch(`/api/requisitions/${requisitionId}/audit-trail`)
-      if (auditResponse.ok) {
-        const auditData = await auditResponse.json()
-        setAuditTrail(auditData.data || [])
-      }
-
-      // Fetch attachments
-      const attachResponse = await fetch(`/api/requisitions/${requisitionId}/attachments`)
-      if (attachResponse.ok) {
-        const attachData = await attachResponse.json()
-        setAttachments(attachData.data || [])
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
-  }
-
-  const handleDownloadAttachment = async (attachmentId: string, fileName: string) => {
-    try {
-      const response = await fetch(
-        `/api/requisitions/${requisitionId}/attachments/${attachmentId}/download`
-      )
-      if (!response.ok) {
-        throw new Error('Failed to download attachment')
-      }
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileName
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-    } catch (err) {
-      console.error('Download error:', err)
-    }
-  }
-
-  const handleDeleteRequisition = async () => {
-    setIsDeleting(true)
-    try {
-      const response = await fetch(`/api/requisitions/${requisitionId}/delete`, {
-        method: 'POST',
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to delete requisition')
-      }
-
-      // Redirect to requisitions list after successful deletion
-      router.push('/requisitions')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete requisition')
-      setShowDeleteModal(false)
-      setIsDeleting(false)
-    }
-  }
-
-  if (isLoading) {
-    return <div className="p-8 text-center text-gray-500">Loading requisition details...</div>
-  }
+    load()
+  }, [load])
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
-        <AlertCircle className="w-5 h-5 text-red-600" />
-        <p className="text-sm text-red-700">{error}</p>
+      <div className="space-y-4">
+        <BackLink />
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Couldn&apos;t open requisition</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       </div>
     )
   }
 
   if (!requisition) {
-    return <div className="p-8 text-center text-gray-500">Requisition not found</div>
+    return (
+      <div className="space-y-6">
+        <BackLink />
+        <Skeleton className="h-24 w-full" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
   }
 
-  const canApprove = (requisition?.status === 'SUBMITTED' || requisition?.status === 'UNDER_REVIEW') && 
-                     (user?.role === 'MANAGER' || user?.role === 'FINANCE' || user?.role === 'ADMIN')
-  const hasPendingSteps = requisition?.approvalSteps?.some((step: ApprovalStep) => step.status === 'PENDING')
+  const steps: ApprovalStepView[] = requisition.approvalSteps ?? []
+  const nextStep = steps.find(step => step.status === 'PENDING') as (ApprovalStepView & { assignedUserId?: string | null }) | undefined
+  const isAdmin = user?.role === 'ADMIN'
+  const isOwner = requisition.submitterId === user?.id || requisition.submitter?.id === user?.id
+  const inReview = requisition.status === 'SUBMITTED' || requisition.status === 'UNDER_REVIEW'
+  const isMyTurn =
+    !!nextStep &&
+    (isAdmin ||
+      nextStep.assignedUserId === user?.id ||
+      (!nextStep.assignedUserId && nextStep.requiredRole === user?.role))
+  const canApprove = inReview && isMyTurn && ['MANAGER', 'FINANCE', 'ADMIN'].includes(user?.role ?? '')
+  const canRecordPayment = requisition.status === 'APPROVED' && (user?.role === 'FINANCE' || isAdmin)
+  const isDraft = requisition.status === 'DRAFT'
+  const canSubmit = isDraft && (isOwner || isAdmin)
+  const canManageAttachments = isDraft && (isOwner || user?.role !== 'STAFF')
+  const initialAction = searchParams?.get('action') as 'approve' | 'reject' | null
+
+  const submitDraft = async () => {
+    setBusy(true)
+    try {
+      const response = await fetch(
+        `/api/requisitions/${requisitionId}/submit`,
+        addCSRFTokenToRequest({ method: 'POST', headers: { 'Content-Type': 'application/json' } }, csrfToken)
+      )
+      if (!response.ok) throw new Error(getApiErrorMessage(await response.json().catch(() => null), 'Failed to submit'))
+      toast.success('Requisition submitted', { description: 'It has been routed to the required approvers.' })
+      setShowSubmit(false)
+      notifyCountsChanged()
+      await load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const deleteRequisition = async () => {
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/requisitions/${requisitionId}/delete`, { method: 'POST' })
+      if (!response.ok) throw new Error(getApiErrorMessage(await response.json().catch(() => null), 'Failed to delete'))
+      toast.success('Requisition deleted')
+      router.push('/requisitions')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete')
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Prominent Approval Actions Section */}
-      {canApprove && hasPendingSteps && (
-        <div id="approval-actions-section">
-          <ApprovalActions
-            requisitionId={requisitionId}
-            onSuccess={() => {
-              fetchRequisitionDetails()
+      <BackLink />
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge value={requisition.status} />
+            <StatusBadge kind="urgency" value={requisition.urgencyLevel} />
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{requisition.title}</h1>
+          <button
+            onClick={async () => {
+              await navigator.clipboard.writeText(requisition.id)
+              toast.success('Requisition ID copied')
             }}
-            initialAction={searchParams?.get('action') as 'approve' | 'reject' | undefined}
-          />
+            className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground"
+          >
+            {requisition.id} <Copy className="h-3 w-3" />
+          </button>
         </div>
-      )}
-
-      {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{requisition.title}</h1>
-            <p className="text-sm text-gray-600 mt-1">ID: {requisition.id}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {user?.role === 'ADMIN' && (
-              <div className="flex gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          {canSubmit && (
+            <Button onClick={() => setShowSubmit(true)}>
+              <Send /> Submit for approval
+            </Button>
+          )}
+          {isAdmin && (
+            <>
+              <Button variant="outline" asChild>
                 <Link href={`/requisitions/${requisitionId}/edit`}>
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
-                    Edit
-                  </button>
+                  <Pencil /> Edit
                 </Link>
-                <button
-                  onClick={() => setShowDeleteModal(true)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm"
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-            <span
-              className={`inline-block px-4 py-2 rounded-full text-sm font-semibold ${
-                STATUS_COLORS[requisition.status] || 'bg-gray-100 text-gray-800'
-              }`}
-            >
-              {requisition.status.replace(/_/g, ' ')}
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-600 uppercase">Estimated Cost</p>
-            <p className="text-lg font-bold text-gray-900 mt-1">
-              {formatCurrency(requisition.estimatedCost, requisition.currency)}
-            </p>
-          </div>
-          {requisition.approvedCost && (
-            <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Approved Cost</p>
-              <p className="text-lg font-bold text-green-600 mt-1">
-                {formatCurrency(requisition.approvedCost, requisition.currency)}
-              </p>
-            </div>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="More actions">
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setTab('activity')}>View activity</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setShowDelete(true)}>
+                    <Trash2 /> Delete requisition
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           )}
-          {requisition.actualCostPaid && (
-            <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase">Actual Paid</p>
-              <p className="text-lg font-bold text-purple-600 mt-1">
-                {formatCurrency(requisition.actualCostPaid, requisition.currency)}
-              </p>
-            </div>
-          )}
-          <div>
-            <p className="text-xs font-semibold text-gray-600 uppercase">Urgency</p>
-            <p className="text-lg font-bold text-gray-900 mt-1">{requisition.urgencyLevel}</p>
-          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <div className="flex gap-8 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('details')}
-            className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap transition-colors ${
-              activeTab === 'details'
-                ? 'border-brand-primary text-brand-primary'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Details
-          </button>
-          <button
-            onClick={() => setActiveTab('financial')}
-            className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap ${
-              activeTab === 'financial'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Financial
-          </button>
-          {requisition?.status === 'APPROVED' && (
-            <button
-              onClick={() => setActiveTab('payment')}
-              className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap ${
-                activeTab === 'payment'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Record Payment
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap ${
-              activeTab === 'history'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Status History
-          </button>
-          <button
-            onClick={() => setActiveTab('attachments')}
-            className={`px-4 py-3 font-medium border-b-2 whitespace-nowrap ${
-              activeTab === 'attachments'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Attachments ({attachments.length})
-          </button>
-        </div>
-      </div>
-
-      {/* Details Tab */}
-      {activeTab === 'details' && (
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 space-y-6">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Category</h3>
-            <p className="text-gray-900">{requisition.category}</p>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Description</h3>
-            <p className="text-gray-900 whitespace-pre-wrap">{requisition.description}</p>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Business Justification</h3>
-            <p className="text-gray-900 whitespace-pre-wrap">{requisition.businessJustification}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Submitted By</h3>
-              <p className="text-gray-900">{requisition.submitter?.name}</p>
-              <p className="text-sm text-gray-600">{requisition.submitter?.email}</p>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Department</h3>
-              <p className="text-gray-900">{requisition.department?.name}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Created</h3>
-              <p className="text-gray-900">{formatDate(requisition.createdAt)}</p>
-            </div>
-
-            {requisition.paymentDate && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-600 uppercase mb-2">Payment Date</h3>
-                <p className="text-gray-900">{formatDate(requisition.paymentDate)}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Approval Steps */}
-          {requisition.approvalSteps && requisition.approvalSteps.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-600 uppercase mb-4">Approval Steps</h3>
-              <div className="space-y-3">
-                {requisition.approvalSteps.map((step: ApprovalStep) => (
-                  <div key={step.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-medium text-gray-900">Step {step.stepNumber}: {step.requiredRole}</p>
-                        {step.assignedUser && (
-                          <p className="text-sm text-gray-600">{step.assignedUser.name}</p>
-                        )}
-                      </div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          step.status === 'APPROVED'
-                            ? 'bg-green-100 text-green-800'
-                            : step.status === 'REJECTED'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}
-                      >
-                        {step.status}
-                      </span>
-                    </div>
-                    {step.approverComment && (
-                      <p className="text-sm text-gray-700 mt-2">Comment: {step.approverComment}</p>
-                    )}
-                    {step.approvedAt && (
-                      <p className="text-xs text-gray-600 mt-2">{formatDate(step.approvedAt)}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* History Tab */}
-      {activeTab === 'history' && (
-        <AuditTrailViewer requisitionId={requisitionId} />
-      )}
-
-      {/* Attachments Tab */}
-      {activeTab === 'attachments' && (
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          {attachments.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No attachments</p>
-          ) : (
-            <div className="space-y-3">
-              {attachments.map((attachment) => (
-                <div
-                  key={attachment.id}
-                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium text-gray-900">{attachment.fileName}</p>
-                      <p className="text-xs text-gray-600">
-                        {formatFileSize(attachment.fileSize)} • {formatDate(attachment.uploadedAt)}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDownloadAttachment(attachment.id, attachment.fileName)}
-                    className="p-2 text-brand-primary hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Download className="w-5 h-5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Financial Tab */}
-      {activeTab === 'financial' && (
-        <FinancialSummary
+      {canApprove && (
+        <ApprovalActions
           requisitionId={requisitionId}
-          estimatedCost={requisition.estimatedCost}
-          approvedCost={requisition.approvedCost}
-          actualCostPaid={requisition.actualCostPaid}
-          currency={requisition.currency}
-          status={requisition.status}
-          paymentMethod={requisition.paymentMethod}
-          paymentReference={requisition.paymentReference}
-          paymentDate={requisition.paymentDate}
+          requisitionTitle={requisition.title}
+          steps={steps}
+          initialAction={initialAction ?? undefined}
+          onSuccess={load}
         />
       )}
 
-      {/* Payment Recording Tab */}
-      {activeTab === 'payment' && requisition?.status === 'APPROVED' && (
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Record Payment</h2>
-          <PaymentRecordingForm
-            requisitionId={requisitionId}
-            approvedCost={requisition.approvedCost || requisition.estimatedCost}
-            currency={requisition.currency}
-            onPaymentRecorded={() => {
-              fetchRequisitionDetails()
-              setActiveTab('financial')
-            }}
-          />
-        </div>
+      {requisition.status === 'REJECTED' && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>This requisition was rejected</AlertTitle>
+          <AlertDescription>
+            {steps.find(s => s.status === 'REJECTED')?.approverComment ?? 'No reason was given.'}
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={showDeleteModal}
-        title="Delete Requisition"
-        message={`Are you sure you want to delete "${requisition?.title}"? This action cannot be undone and will permanently remove all associated data including attachments and audit trails.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        isDangerous={true}
-        isLoading={isDeleting}
-        onConfirm={handleDeleteRequisition}
-        onCancel={() => setShowDeleteModal(false)}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <MetricCard label="Estimated" value={formatMoney(requisition.estimatedCost, requisition.currency)} />
+        <MetricCard label="Approved" value={formatMoney(requisition.approvedCost, requisition.currency)} tone="text-success" />
+        <MetricCard label="Paid" value={formatMoney(requisition.actualCostPaid, requisition.currency)} tone="text-violet-600 dark:text-violet-400" />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+        <Tabs value={tab} onValueChange={setTab} className="min-w-0">
+          <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="financials">Financials</TabsTrigger>
+            {canRecordPayment && <TabsTrigger value="payment">Record payment</TabsTrigger>}
+            <TabsTrigger value="attachments">Attachments ({attachments.length})</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-4">
+            <Card>
+              <CardContent className="space-y-6 p-6">
+                <Section title="Description">{requisition.description}</Section>
+                <Separator />
+                <Section title="Business justification">{requisition.businessJustification}</Section>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="financials" className="mt-4">
+            <FinancialSummary
+              estimatedCost={requisition.estimatedCost}
+              approvedCost={requisition.approvedCost}
+              actualCostPaid={requisition.actualCostPaid}
+              currency={requisition.currency}
+              status={requisition.status}
+              paymentMethod={requisition.paymentMethod}
+              paymentReference={requisition.paymentReference}
+              paymentDate={requisition.paymentDate}
+              paymentComment={requisition.paymentComment}
+            />
+          </TabsContent>
+
+          {canRecordPayment && (
+            <TabsContent value="payment" className="mt-4">
+              <PaymentRecordingForm
+                requisitionId={requisitionId}
+                approvedCost={requisition.approvedCost || requisition.estimatedCost}
+                currency={requisition.currency}
+                onPaymentRecorded={async () => {
+                  await load()
+                  setTab('financials')
+                }}
+              />
+            </TabsContent>
+          )}
+
+          <TabsContent value="attachments" className="mt-4">
+            <AttachmentsPanel requisitionId={requisitionId} attachments={attachments} canManage={canManageAttachments} onChange={load} />
+          </TabsContent>
+
+          <TabsContent value="activity" className="mt-4">
+            <AuditTrailViewer key={activityKey} requisitionId={requisitionId} />
+          </TabsContent>
+        </Tabs>
+
+        <aside className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Approval progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {steps.length > 0 ? (
+                <ApprovalProgress steps={steps} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {isDraft ? 'Approval steps are created when the requisition is submitted.' : 'No approval steps.'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="flex items-center gap-3">
+                <UserAvatar name={requisition.submitter?.name} className="h-9 w-9" />
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{requisition.submitter?.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{requisition.submitter?.email}</p>
+                </div>
+              </div>
+              <Separator />
+              <DetailRow icon={Building2} label="Department" value={requisition.department?.name} />
+              <DetailRow icon={Tag} label="Category" value={requisition.category} />
+              <DetailRow icon={CalendarDays} label="Created" value={formatDate(requisition.createdAt, true)} />
+              <DetailRow icon={CalendarDays} label="Last updated" value={formatDate(requisition.updatedAt, true)} />
+              {requisition.paymentDate && <DetailRow icon={CalendarDays} label="Paid on" value={formatDate(requisition.paymentDate)} />}
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+
+      <ConfirmDialog
+        open={showSubmit}
+        onOpenChange={setShowSubmit}
+        title="Submit for approval?"
+        description="The requisition will be routed to approvers and can no longer be edited by you."
+        confirmText="Submit"
+        loading={busy}
+        onConfirm={submitDraft}
       />
+      <ConfirmDialog
+        open={showDelete}
+        onOpenChange={setShowDelete}
+        title="Delete requisition?"
+        description={
+          <>
+            This permanently removes <span className="font-medium text-foreground">{requisition.title}</span> with its attachments and audit trail. This
+            cannot be undone.
+          </>
+        }
+        confirmText="Delete"
+        destructive
+        loading={busy}
+        onConfirm={deleteRequisition}
+      />
+    </div>
+  )
+}
+
+function BackLink() {
+  return (
+    <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground">
+      <Link href="/requisitions">
+        <ArrowLeft /> Requisitions
+      </Link>
+    </Button>
+  )
+}
+
+function MetricCard({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone ?? ''}`}>{value}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+      <p className="whitespace-pre-wrap leading-relaxed">{children}</p>
+    </div>
+  )
+}
+
+function DetailRow({ icon: Icon, label, value }: { icon: typeof Tag; label: string; value?: string | null }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="flex items-center gap-2 text-muted-foreground">
+        <Icon className="h-4 w-4" />
+        {label}
+      </span>
+      <span className="truncate text-right font-medium">{value || '—'}</span>
     </div>
   )
 }

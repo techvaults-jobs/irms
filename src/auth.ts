@@ -1,4 +1,4 @@
-import NextAuth from 'next-auth'
+import NextAuth, { CredentialsSignin } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
@@ -15,6 +15,19 @@ if (!nextAuthSecret || nextAuthSecret === 'your-secret-key-here') {
     // In production, we still need to export handlers, but they will fail gracefully
     console.error('⚠️  NextAuth will not work until NEXTAUTH_SECRET is set')
   }
+}
+
+// Account-state errors surface to the client as `result.code` from signIn().
+// They are only thrown after the password is verified, so they never reveal
+// whether an email is registered.
+class AccountPendingError extends CredentialsSignin {
+  code = 'account_pending'
+}
+class AccountRejectedError extends CredentialsSignin {
+  code = 'account_rejected'
+}
+class AccountInactiveError extends CredentialsSignin {
+  code = 'account_inactive'
 }
 
 const loginSchema = z.object({
@@ -50,8 +63,8 @@ const authConfig = {
 
           log('✅ Credentials validated')
 
-          const user = await prisma.user.findUnique({
-            where: { email: validatedCredentials.data.email },
+          const user = await prisma.user.findFirst({
+            where: { email: { equals: validatedCredentials.data.email.trim(), mode: 'insensitive' } },
             select: {
               id: true,
               email: true,
@@ -59,6 +72,7 @@ const authConfig = {
               password: true,
               role: true,
               isActive: true,
+              accountStatus: true,
               departmentId: true,
             },
           })
@@ -70,12 +84,6 @@ const authConfig = {
           }
 
           log('✅ User found', { id: user.id, email: user.email, isActive: user.isActive })
-
-          if (!user.isActive) {
-            log('❌ User is not active')
-            console.error(`[AUTH] User is not active: ${user.email}`)
-            return null
-          }
 
           log('🔐 Verifying password...')
           
@@ -101,6 +109,22 @@ const authConfig = {
 
           log('✅ Password verified successfully')
 
+          if (user.accountStatus === 'PENDING') {
+            log('⏳ Account awaiting admin approval')
+            throw new AccountPendingError()
+          }
+
+          if (user.accountStatus === 'REJECTED') {
+            log('❌ Account registration was rejected')
+            throw new AccountRejectedError()
+          }
+
+          if (!user.isActive) {
+            log('❌ User is not active')
+            console.error(`[AUTH] User is not active: ${user.email}`)
+            throw new AccountInactiveError()
+          }
+
           const sessionUser = {
             id: user.id,
             email: user.email,
@@ -112,6 +136,9 @@ const authConfig = {
           log('✅ Returning user object', { id: sessionUser.id, email: sessionUser.email })
           return sessionUser
         } catch (error) {
+          if (error instanceof CredentialsSignin) {
+            throw error
+          }
           log('❌ Error in authorize()', error)
           console.error('[AUTH] Error in authorize():', error)
           return null

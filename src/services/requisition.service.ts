@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { ReportingService } from './reporting.service'
 import { Decimal } from '@prisma/client/runtime/library'
 import { z } from 'zod'
@@ -35,6 +36,34 @@ export const updateRequisitionSchema = createRequisitionSchema.partial()
 export type CreateRequisitionInput = z.infer<typeof createRequisitionSchema>
 export type UpdateRequisitionInput = z.infer<typeof updateRequisitionSchema>
 
+export interface RequisitionListFilters {
+  status?: string
+  submitterId?: string
+  departmentId?: string
+  search?: string
+}
+
+export type RequisitionSort = 'newest' | 'oldest' | 'amount_desc' | 'amount_asc'
+
+const REQUISITION_SORT_ORDER: Record<RequisitionSort, Prisma.RequisitionOrderByWithRelationInput> = {
+  newest: { createdAt: 'desc' },
+  oldest: { createdAt: 'asc' },
+  amount_desc: { estimatedCost: 'desc' },
+  amount_asc: { estimatedCost: 'asc' },
+}
+
+function buildRequisitionWhere({ search, ...where }: RequisitionListFilters): Prisma.RequisitionWhereInput {
+  if (!search) return where
+  return {
+    ...where,
+    OR: [
+      { title: { contains: search, mode: 'insensitive' } },
+      { category: { contains: search, mode: 'insensitive' } },
+      { id: { startsWith: search } },
+    ],
+  }
+}
+
 export class RequisitionService {
   static async createRequisition(
     data: CreateRequisitionInput,
@@ -62,7 +91,7 @@ export class RequisitionService {
         departmentId,
       },
       include: {
-        submitter: true,
+        submitter: { select: { id: true, name: true, email: true } },
         department: true,
       },
     })
@@ -106,7 +135,7 @@ export class RequisitionService {
       where: { id: requisitionId },
       data: updateData,
       include: {
-        submitter: true,
+        submitter: { select: { id: true, name: true, email: true } },
         department: true,
       },
     })
@@ -160,6 +189,7 @@ export class RequisitionService {
             status: true,
             approverComment: true,
             approvedAt: true,
+            assignedUserId: true,
             assignedUser: {
               select: {
                 id: true,
@@ -185,18 +215,16 @@ export class RequisitionService {
   }
 
   static async listRequisitions(
-    filters?: {
-      status?: string
-      submitterId?: string
-      departmentId?: string
+    filters?: RequisitionListFilters & {
       skip?: number
       take?: number
+      sort?: RequisitionSort
     }
   ) {
-    const { skip = 0, take = 20, ...where } = filters || {}
+    const { skip = 0, take = 20, sort = 'newest', ...filterFields } = filters || {}
 
     return prisma.requisition.findMany({
-      where,
+      where: buildRequisitionWhere(filterFields),
       select: {
         id: true,
         title: true,
@@ -204,6 +232,7 @@ export class RequisitionService {
         estimatedCost: true,
         approvedCost: true,
         actualCostPaid: true,
+        currency: true,
         status: true,
         urgencyLevel: true,
         createdAt: true,
@@ -221,19 +250,29 @@ export class RequisitionService {
             name: true,
           },
         },
+        approvalSteps: {
+          select: {
+            id: true,
+            stepNumber: true,
+            requiredRole: true,
+            status: true,
+            assignedUserId: true,
+            approverComment: true,
+            approvedAt: true,
+            assignedUser: { select: { id: true, name: true } },
+          },
+          orderBy: { stepNumber: 'asc' },
+        },
+        _count: { select: { attachments: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: REQUISITION_SORT_ORDER[sort] ?? REQUISITION_SORT_ORDER.newest,
       skip,
       take,
     })
   }
 
-  static async countRequisitions(filters?: {
-    status?: string
-    submitterId?: string
-    departmentId?: string
-  }) {
-    return prisma.requisition.count({ where: filters })
+  static async countRequisitions(filters?: RequisitionListFilters) {
+    return prisma.requisition.count({ where: buildRequisitionWhere(filters || {}) })
   }
 
   static async submitRequisition(requisitionId: string) {
@@ -257,7 +296,7 @@ export class RequisitionService {
       where: { id: requisitionId },
       data: { status: RequisitionStatus.SUBMITTED },
       include: {
-        submitter: true,
+        submitter: { select: { id: true, name: true, email: true } },
         department: true,
       },
     })

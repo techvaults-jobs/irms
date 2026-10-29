@@ -146,6 +146,56 @@ export const createUserSchema = z.object({
     .min(1, 'Department ID is required'),
   role: z.enum(['STAFF', 'MANAGER', 'FINANCE', 'ADMIN'])
     .refine(role => role !== undefined, 'Role is required'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be 128 characters or less')
+    .optional(),
+})
+
+const passwordPolicy = z.string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(128, 'Password must be 128 characters or less')
+  .regex(/[A-Za-z]/, 'Password must contain at least one letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+
+export const registerUserSchema = z.object({
+  email: z.string()
+    .trim()
+    .email('Invalid email address')
+    .max(255, 'Email must be 255 characters or less')
+    .transform(sanitizeEmail),
+  name: z.string()
+    .trim()
+    .min(2, 'Full name is required')
+    .max(255, 'Name must be 255 characters or less')
+    .transform(sanitizeString),
+  password: passwordPolicy,
+  departmentId: z.string()
+    .min(1, 'Department is required'),
+  jobTitle: z.string()
+    .trim()
+    .max(120, 'Job title must be 120 characters or less')
+    .optional()
+    .transform(val => val ? sanitizeString(val) : undefined),
+  phone: z.string()
+    .trim()
+    .max(30, 'Phone number must be 30 characters or less')
+    .regex(/^[0-9+()\-\s]*$/, 'Phone number contains invalid characters')
+    .optional()
+    .transform(val => val || undefined),
+})
+
+export const approveAccountSchema = z.object({
+  role: z.enum(['STAFF', 'MANAGER', 'FINANCE', 'ADMIN']).default('STAFF'),
+  departmentId: z.string().min(1).optional(),
+})
+
+export const rejectAccountSchema = z.object({
+  reason: z.string()
+    .trim()
+    .min(1, 'A reason is required')
+    .max(1000, 'Reason must be 1000 characters or less')
+    .transform(sanitizeString),
 })
 
 export const updateUserSchema = z.object({
@@ -240,6 +290,7 @@ export type PaymentRecordingInput = z.infer<typeof paymentRecordingSchema>
 
 export type CreateUserInput = z.infer<typeof createUserSchema>
 export type UpdateUserInput = z.infer<typeof updateUserSchema>
+export type RegisterUserInput = z.infer<typeof registerUserSchema>
 
 export type AttachmentUploadInput = z.infer<typeof attachmentUploadSchema>
 

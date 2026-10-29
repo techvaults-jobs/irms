@@ -1,21 +1,32 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { AlertCircle, CheckCircle, Trash2, Edit2, Plus } from 'lucide-react'
-import { ConfirmationModal } from './ConfirmationModal'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { ArrowRight, GitBranch, Loader2, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FieldError } from '@/components/auth/field-error'
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
+import { ROLES } from '@/lib/status'
+import { apiFetch, asList, formatMoney } from '@/lib/utils'
 
 interface ApprovalRule {
   id: string
   minAmount: string | number
   maxAmount: string | number | null
   requiredApprovers: string[]
-  department?: {
-    id: string
-    name: string
-  }
   departmentId: string | null
-  createdAt: string
-  updatedAt: string
+  department?: { id: string; name: string } | null
 }
 
 interface Department {
@@ -23,453 +34,259 @@ interface Department {
   name: string
 }
 
-const AVAILABLE_ROLES = ['STAFF', 'MANAGER', 'FINANCE', 'ADMIN']
+const APPROVER_ROLES = ['MANAGER', 'FINANCE', 'ADMIN']
+const ALL_DEPARTMENTS = '__all__'
+const EMPTY_FORM = { minAmount: '', maxAmount: '', requiredApprovers: [] as string[], departmentId: ALL_DEPARTMENTS }
 
 export function ApprovalRuleConfig() {
-  const [rules, setRules] = useState<ApprovalRule[]>([])
+  const [rules, setRules] = useState<ApprovalRule[] | null>(null)
   const [departments, setDepartments] = useState<Department[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean
-    ruleId?: string
-  }>({
-    isOpen: false,
-  })
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<ApprovalRule | null>(null)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [toDelete, setToDelete] = useState<ApprovalRule | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  const [formData, setFormData] = useState({
-    minAmount: '',
-    maxAmount: '',
-    requiredApprovers: [] as string[],
-    departmentId: '',
-  })
-
-  useEffect(() => {
-    fetchRules()
-    fetchDepartments()
+  const load = useCallback(async () => {
+    try {
+      setRules(asList(await apiFetch('/api/approval-rules?take=100')))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load rules')
+      setRules([])
+    }
   }, [])
 
-  const fetchRules = async () => {
-    setIsLoading(true)
-    setError(null)
+  useEffect(() => {
+    load()
+    apiFetch<Department[]>('/api/departments').then(setDepartments).catch(() => {})
+  }, [load])
 
-    try {
-      const response = await fetch('/api/approval-rules')
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch approval rules')
-      }
-
-      const data = await response.json()
-      setRules(data || [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
-    }
+  const openForm = (rule?: ApprovalRule) => {
+    setEditing(rule ?? null)
+    setErrors({})
+    setForm(
+      rule
+        ? {
+            minAmount: String(rule.minAmount),
+            maxAmount: rule.maxAmount != null ? String(rule.maxAmount) : '',
+            requiredApprovers: rule.requiredApprovers,
+            departmentId: rule.departmentId ?? ALL_DEPARTMENTS,
+          }
+        : EMPTY_FORM
+    )
+    setDialogOpen(true)
   }
 
-  const fetchDepartments = async () => {
-    try {
-      // Fetch departments from an endpoint or use a hardcoded list
-      // For now, we'll assume departments are available
-      setDepartments([])
-    } catch (err) {
-      console.error('Failed to fetch departments:', err)
-    }
-  }
-
-  const validateForm = () => {
-    const errors: Record<string, string> = {}
-
-    if (!formData.minAmount) {
-      errors.minAmount = 'Minimum amount is required'
-    } else if (parseFloat(formData.minAmount) < 0) {
-      errors.minAmount = 'Minimum amount must be >= 0'
-    }
-
-    if (formData.maxAmount && parseFloat(formData.maxAmount) <= 0) {
-      errors.maxAmount = 'Maximum amount must be > 0'
-    }
-
-    if (formData.maxAmount && parseFloat(formData.minAmount) > parseFloat(formData.maxAmount)) {
-      errors.maxAmount = 'Maximum amount must be greater than minimum amount'
-    }
-
-    if (formData.requiredApprovers.length === 0) {
-      errors.requiredApprovers = 'At least one approver role is required'
-    }
-
-    setValidationErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
+  const toggleRole = (role: string) => {
+    setForm(f => ({
+      ...f,
+      requiredApprovers: f.requiredApprovers.includes(role) ? f.requiredApprovers.filter(r => r !== role) : [...f.requiredApprovers, role],
     }))
-    if (validationErrors[name]) {
-      setValidationErrors(prev => ({
-        ...prev,
-        [name]: '',
-      }))
-    }
+    setErrors(e => ({ ...e, requiredApprovers: '' }))
   }
 
-  const handleApproverToggle = (role: string) => {
-    setFormData(prev => ({
-      ...prev,
-      requiredApprovers: prev.requiredApprovers.includes(role)
-        ? prev.requiredApprovers.filter(r => r !== role)
-        : [...prev.requiredApprovers, role],
-    }))
-    if (validationErrors.requiredApprovers) {
-      setValidationErrors(prev => ({
-        ...prev,
-        requiredApprovers: '',
-      }))
-    }
-  }
+  const save = async () => {
+    const next: Record<string, string> = {}
+    const min = parseFloat(form.minAmount)
+    const max = form.maxAmount ? parseFloat(form.maxAmount) : null
+    if (form.minAmount === '' || isNaN(min) || min < 0) next.minAmount = 'Enter a minimum of 0 or more'
+    if (max !== null && (isNaN(max) || max <= min)) next.maxAmount = 'Maximum must be greater than the minimum'
+    if (form.requiredApprovers.length === 0) next.requiredApprovers = 'Choose at least one approver'
+    setErrors(next)
+    if (Object.keys(next).length) return
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!validateForm()) return
-
-    setError(null)
-    setSuccess(false)
-
+    setSaving(true)
     try {
       const payload = {
-        minAmount: parseFloat(formData.minAmount),
-        maxAmount: formData.maxAmount ? parseFloat(formData.maxAmount) : null,
-        requiredApprovers: formData.requiredApprovers,
-        departmentId: formData.departmentId || null,
+        minAmount: min,
+        ...(max !== null && { maxAmount: max }),
+        requiredApprovers: form.requiredApprovers,
+        ...(form.departmentId !== ALL_DEPARTMENTS && { departmentId: form.departmentId }),
       }
-
-      const url = editingId ? `/api/approval-rules/${editingId}` : '/api/approval-rules'
-      const method = editingId ? 'PATCH' : 'POST'
-
-      const response = await fetch(url, {
-        method,
+      await apiFetch(editing ? `/api/approval-rules/${editing.id}` : '/api/approval-rules', {
+        method: editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || `Failed to ${editingId ? 'update' : 'create'} approval rule`)
-      }
-
-      setSuccess(true)
-      setShowForm(false)
-      setEditingId(null)
-      setFormData({
-        minAmount: '',
-        maxAmount: '',
-        requiredApprovers: [],
-        departmentId: '',
-      })
-      await fetchRules()
-
-      setTimeout(() => setSuccess(false), 3000)
+      toast.success(editing ? 'Rule updated' : 'Rule created')
+      setDialogOpen(false)
+      load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    }
-  }
-
-  const handleEdit = (rule: ApprovalRule) => {
-    setFormData({
-      minAmount: rule.minAmount.toString(),
-      maxAmount: rule.maxAmount ? rule.maxAmount.toString() : '',
-      requiredApprovers: rule.requiredApprovers,
-      departmentId: rule.departmentId || '',
-    })
-    setEditingId(rule.id)
-    setShowForm(true)
-  }
-
-  const handleDelete = (ruleId: string) => {
-    setConfirmModal({
-      isOpen: true,
-      ruleId,
-    })
-  }
-
-  const handleConfirmDelete = async () => {
-    if (!confirmModal.ruleId) return
-
-    setIsDeleting(true)
-
-    try {
-      const response = await fetch(`/api/approval-rules/${confirmModal.ruleId}`, {
-        method: 'DELETE',
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete approval rule')
-      }
-
-      setSuccess(true)
-      setConfirmModal({ isOpen: false })
-      await fetchRules()
-      setTimeout(() => setSuccess(false), 3000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      toast.error(err instanceof Error ? err.message : 'Failed to save rule')
     } finally {
-      setIsDeleting(false)
+      setSaving(false)
     }
   }
 
-  const handleCancelDelete = () => {
-    setConfirmModal({ isOpen: false })
-  }
-
-  const handleCancel = () => {
-    setShowForm(false)
-    setEditingId(null)
-    setFormData({
-      minAmount: '',
-      maxAmount: '',
-      requiredApprovers: [],
-      departmentId: '',
-    })
-    setValidationErrors({})
-  }
-
-  const formatCurrency = (amount: string | number) => {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount
-    return new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency: 'NGN',
-    }).format(num)
-  }
-
-  if (isLoading) {
-    return <div className="p-8 text-center text-gray-500">Loading approval rules...</div>
+  const remove = async () => {
+    if (!toDelete) return
+    setDeleting(true)
+    try {
+      await apiFetch(`/api/approval-rules/${toDelete.id}`, { method: 'DELETE' })
+      toast.success('Rule deleted')
+      setToDelete(null)
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete rule')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <p className="text-sm text-red-700">{error}</p>
+    <Card>
+      <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <GitBranch className="h-4 w-4" /> Approval rules
+          </CardTitle>
+          <CardDescription>Amount thresholds decide which roles must approve a requisition, in order.</CardDescription>
         </div>
-      )}
-
-      {success && (
-        <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          <p className="text-sm text-green-700">Operation completed successfully!</p>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Approval Rules</h2>
-        {!showForm && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Rule
-          </button>
-        )}
-      </div>
-
-      {/* Form */}
-      {showForm && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            {editingId ? 'Edit Approval Rule' : 'Create New Approval Rule'}
-          </h3>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="minAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                  Minimum Amount *
-                </label>
-                <input
-                  type="number"
-                  id="minAmount"
-                  name="minAmount"
-                  value={formData.minAmount}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    validationErrors.minAmount ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="0.00"
-                />
-                {validationErrors.minAmount && (
-                  <p className="text-sm text-red-600 mt-1">{validationErrors.minAmount}</p>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="maxAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                  Maximum Amount (Optional)
-                </label>
-                <input
-                  type="number"
-                  id="maxAmount"
-                  name="maxAmount"
-                  value={formData.maxAmount}
-                  onChange={handleInputChange}
-                  step="0.01"
-                  min="0"
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    validationErrors.maxAmount ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="Leave empty for no limit"
-                />
-                {validationErrors.maxAmount && (
-                  <p className="text-sm text-red-600 mt-1">{validationErrors.maxAmount}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Required Approver Roles *
-              </label>
-              <div className="space-y-2">
-                {AVAILABLE_ROLES.map(role => (
-                  <label key={role} className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={formData.requiredApprovers.includes(role)}
-                      onChange={() => handleApproverToggle(role)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">{role}</span>
-                  </label>
-                ))}
-              </div>
-              {validationErrors.requiredApprovers && (
-                <p className="text-sm text-red-600 mt-2">{validationErrors.requiredApprovers}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="departmentId" className="block text-sm font-medium text-gray-700 mb-1">
-                Department (Optional - leave empty for all departments)
-              </label>
-              <select
-                id="departmentId"
-                name="departmentId"
-                value={formData.departmentId}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex gap-4 pt-4">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {editingId ? 'Update Rule' : 'Create Rule'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Rules List */}
-      {rules.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">No approval rules configured</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {rules.map(rule => (
-            <div key={rule.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {formatCurrency(rule.minAmount)} - {rule.maxAmount ? formatCurrency(rule.maxAmount) : 'Unlimited'}
-                    </h3>
-                    {rule.department && (
-                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
-                        {rule.department.name}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm text-gray-600">Requires approval from:</p>
-                    <div className="flex gap-2">
-                      {rule.requiredApprovers.map(role => (
-                        <span
-                          key={role}
-                          className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs font-medium"
-                        >
-                          {role}
+        <Button size="sm" onClick={() => openForm()}>
+          <Plus /> Add rule
+        </Button>
+      </CardHeader>
+      <CardContent className="px-0">
+        {rules === null ? (
+          <div className="space-y-2 px-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : rules.length === 0 ? (
+          <EmptyState icon={GitBranch} title="No approval rules" description="Without rules, submitted requisitions can't be routed." className="mx-6" />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-6">Amount range</TableHead>
+                <TableHead>Approval chain</TableHead>
+                <TableHead className="hidden sm:table-cell">Applies to</TableHead>
+                <TableHead className="w-12 pr-6" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rules.map(rule => (
+                <TableRow key={rule.id}>
+                  <TableCell className="pl-6 font-medium tabular-nums">
+                    {formatMoney(rule.minAmount)} – {rule.maxAmount != null ? formatMoney(rule.maxAmount) : 'and above'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {rule.requiredApprovers.map((role, i) => (
+                        <span key={`${role}-${i}`} className="flex items-center gap-1">
+                          {i > 0 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
+                          <Badge variant={ROLES[role]?.variant ?? 'outline'}>{ROLES[role]?.label ?? role}</Badge>
                         </span>
                       ))}
                     </div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(rule)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(rule.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground sm:table-cell">{rule.department?.name ?? 'All departments'}</TableCell>
+                  <TableCell className="pr-6">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Rule actions">
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openForm(rule)}>
+                          <Pencil /> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setToDelete(rule)}>
+                          <Trash2 /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+
+      <Dialog open={dialogOpen} onOpenChange={open => !saving && setDialogOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? 'Edit approval rule' : 'New approval rule'}</DialogTitle>
+            <DialogDescription>Requisitions whose estimated cost falls in this range require these approvals.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="minAmount">Minimum (₦)</Label>
+                <Input id="minAmount" type="number" min="0" value={form.minAmount} onChange={e => setForm(f => ({ ...f, minAmount: e.target.value }))} aria-invalid={!!errors.minAmount} />
+                <FieldError message={errors.minAmount} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxAmount">
+                  Maximum (₦) <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <Input id="maxAmount" type="number" min="0" placeholder="No limit" value={form.maxAmount} onChange={e => setForm(f => ({ ...f, maxAmount: e.target.value }))} aria-invalid={!!errors.maxAmount} />
+                <FieldError message={errors.maxAmount} />
               </div>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="space-y-2">
+              <Label>Approvers, in order</Label>
+              <div className="grid gap-2">
+                {APPROVER_ROLES.map(role => {
+                  const position = form.requiredApprovers.indexOf(role)
+                  return (
+                    <Label key={role} className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 font-normal hover:bg-accent/50">
+                      <Checkbox checked={position >= 0} onCheckedChange={() => toggleRole(role)} />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{ROLES[role].label}</p>
+                        <p className="text-xs text-muted-foreground">{ROLES[role].description}</p>
+                      </div>
+                      {position >= 0 && <Badge variant="outline">Step {position + 1}</Badge>}
+                    </Label>
+                  )
+                })}
+              </div>
+              <FieldError message={errors.requiredApprovers} />
+            </div>
+            <div className="space-y-2">
+              <Label>Department</Label>
+              <Select value={form.departmentId} onValueChange={value => setForm(f => ({ ...f, departmentId: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_DEPARTMENTS}>All departments</SelectItem>
+                  {departments.map(d => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={saving}>
+              {saving && <Loader2 className="animate-spin" />}
+              {editing ? 'Save rule' : 'Create rule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={confirmModal.isOpen}
-        title="Delete Approval Rule"
-        message="Are you sure you want to delete this approval rule?"
-        description="This action cannot be undone. The rule will be permanently removed from the system."
-        type="danger"
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={open => !open && setToDelete(null)}
+        title="Delete approval rule?"
+        description="Requisitions submitted afterwards will no longer be routed by this rule."
         confirmText="Delete"
-        cancelText="Cancel"
-        isLoading={isDeleting}
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
+        destructive
+        loading={deleting}
+        onConfirm={remove}
       />
-    </div>
+    </Card>
   )
 }

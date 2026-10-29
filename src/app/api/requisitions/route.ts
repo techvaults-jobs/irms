@@ -104,10 +104,20 @@ export async function GET(req: NextRequest) {
       filters.status = status
     }
 
+    const search = searchParams.get('search')?.trim().slice(0, 100)
+    if (search) {
+      filters.search = search
+    }
+
+    const sort = searchParams.get('sort')
+    if (sort === 'newest' || sort === 'oldest' || sort === 'amount_desc' || sort === 'amount_asc') {
+      filters.sort = sort
+    }
+
     const requisitions = await RequisitionService.listRequisitions(filters)
     const total = await RequisitionService.countRequisitions(
       Object.fromEntries(
-        Object.entries(filters).filter(([key]) => !['skip', 'take'].includes(key))
+        Object.entries(filters).filter(([key]) => !['skip', 'take', 'sort'].includes(key))
       )
     )
 

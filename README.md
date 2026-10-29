@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IRMS — Internal Requisition Management System
 
-## Getting Started
+Next.js 14 (App Router) · NextAuth v5 · Prisma/PostgreSQL · shadcn/ui
 
-First, run the development server:
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env          # set DATABASE_URL and NEXTAUTH_SECRET
+npx prisma migrate deploy
+npx ts-node --compiler-options '{"module":"commonjs"}' dev-scripts/setup-db.ts   # optional seed data
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`RESEND_API_KEY` must be set for `next build` to succeed (the email service
+creates its client at import time).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Staff self-registration
 
-## Learn More
+Staff can request an account at `/auth/register`. New accounts are created as
+`PENDING` and cannot sign in until an admin reviews them.
 
-To learn more about Next.js, take a look at the following resources:
+1. The applicant submits name, work email, department, optional job title/phone, and a password.
+2. Active admins get an email (when an email provider is configured).
+3. Admins review requests under **Users → Requests** and either:
+   - **Approve**, choosing the role and department, which activates the account, or
+   - **Reject** with a reason, which the applicant receives by email.
+4. On sign-in, pending, rejected and deactivated users see a specific message
+   (only after their password is verified, so account existence isn't revealed).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Rejected applicants may submit a new request with the same email. Accounts
+created directly by an admin are approved immediately.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+API: `POST /api/auth/register` (public, rate-limited), `GET /api/users?status=PENDING`,
+`GET /api/users/stats`, `POST /api/users/:id/approve`, `POST /api/users/:id/reject`.
 
-## Deploy on Vercel
+## Deploying
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Vercel deploys `main` to production automatically. On production builds the
+`vercel-build` script runs `prisma migrate deploy` before `next build`, because
+production secrets are marked Sensitive in Vercel and can't be pulled locally to
+run migrations by hand. If a migration fails, the build fails and the previous
+deployment stays live.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## UI
+
+See [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md).

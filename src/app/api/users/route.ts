@@ -32,7 +32,13 @@ export async function GET(req: NextRequest) {
       100
     )
 
-    const { users, total } = await UserService.listUsers(skip, take)
+    const statusParam = searchParams.get('status')
+    const roleParam = searchParams.get('role')
+    const accountStatus = (['PENDING', 'APPROVED', 'REJECTED'] as const).find(s => s === statusParam)
+    const role = (['STAFF', 'MANAGER', 'FINANCE', 'ADMIN'] as const).find(r => r === roleParam)
+    const search = searchParams.get('search')?.trim().slice(0, 100) || undefined
+
+    const { users, total } = await UserService.listUsers(skip, take, { accountStatus, role, search })
     const result = formatPaginationResult(users, skip, take, total)
 
     return NextResponse.json(result)

@@ -1,248 +1,316 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
+import { ArrowUpDown, Copy, Eye, FilePlus2, FileText, MoreHorizontal, Paperclip, Pencil, Search, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { StatusBadge } from '@/components/shared/status-badge'
+import { UserAvatar } from '@/components/shared/user-avatar'
+import { EmptyState } from '@/components/shared/empty-state'
+import { PaginationBar } from '@/components/shared/pagination-bar'
+import { useAuth } from '@/hooks/useAuth'
+import { formatDate, formatMoney } from '@/lib/utils'
 
 interface Requisition {
   id: string
   title: string
+  category: string
   status: string
+  urgencyLevel: string
   estimatedCost: string | number
   currency: string
   createdAt: string
-  submitter?: {
-    name: string
-  }
+  submitter?: { name: string }
+  department?: { name: string }
+  _count?: { attachments: number }
 }
 
-interface RequisitionListProps {
-  initialStatus?: string
-}
+const STATUS_TABS = [
+  { value: 'ALL', label: 'All' },
+  { value: 'DRAFT', label: 'Drafts' },
+  { value: 'UNDER_REVIEW', label: 'In review' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'PAID', label: 'Paid' },
+  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'CLOSED', label: 'Closed' },
+]
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  SUBMITTED: 'bg-info-100 text-info-800',
-  UNDER_REVIEW: 'bg-yellow-100 text-yellow-800',
-  APPROVED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  PAID: 'bg-purple-100 text-purple-800',
-  CLOSED: 'bg-gray-200 text-gray-900',
-}
+const SORTS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'amount_desc', label: 'Highest amount' },
+  { value: 'amount_asc', label: 'Lowest amount' },
+]
 
-export function RequisitionList({ initialStatus }: RequisitionListProps) {
-  const [requisitions, setRequisitions] = useState<Requisition[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+const PAGE_SIZE = 10
+
+export function RequisitionList() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { user } = useAuth()
+  const showSubmitter = user?.role !== 'STAFF'
+
+  const status = searchParams.get('status') || 'ALL'
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
+  const [search, setSearch] = useState(searchInput)
+  const [sort, setSort] = useState('newest')
+  const [page, setPage] = useState(1)
+  const [rows, setRows] = useState<Requisition[] | null>(null)
+  const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
-  const [statusFilter, setStatusFilter] = useState(initialStatus || '')
-  const [sortBy, setSortBy] = useState<'date' | 'amount'>('date')
-
-  const pageSize = 10
 
   useEffect(() => {
-    fetchRequisitions()
-  }, [currentPage, statusFilter, sortBy])
+    const timer = setTimeout(() => {
+      setSearch(searchInput.trim())
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
 
-  const fetchRequisitions = async () => {
-    setIsLoading(true)
+  const fetchRows = useCallback(async () => {
     setError(null)
+    const params = new URLSearchParams({
+      skip: String((page - 1) * PAGE_SIZE),
+      take: String(PAGE_SIZE),
+      sort,
+    })
+    if (status !== 'ALL') params.set('status', status)
+    if (search) params.set('search', search)
 
     try {
-      const params = new URLSearchParams({
-        skip: ((currentPage - 1) * pageSize).toString(),
-        take: pageSize.toString(),
-      })
-
-      if (statusFilter) {
-        params.append('status', statusFilter)
-      }
-
       const response = await fetch(`/api/requisitions?${params}`)
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch requisitions')
-      }
-
+      if (!response.ok) throw new Error('Failed to load requisitions')
       const data = await response.json()
-      let items = data.data || []
-
-      // Client-side sorting
-      if (sortBy === 'amount') {
-        items.sort((a: Requisition, b: Requisition) => {
-          const costA = typeof a.estimatedCost === 'string' ? parseFloat(a.estimatedCost) : a.estimatedCost
-          const costB = typeof b.estimatedCost === 'string' ? parseFloat(b.estimatedCost) : b.estimatedCost
-          return costB - costA
-        })
-      }
-
-      setRequisitions(items)
-      setTotalCount(data.total || 0)
+      setRows(data.data ?? [])
+      setTotal(data.pagination?.total ?? 0)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
+      setError(err instanceof Error ? err.message : 'Failed to load requisitions')
+      setRows([])
     }
+  }, [page, sort, status, search])
+
+  useEffect(() => {
+    fetchRows()
+  }, [fetchRows])
+
+  const setStatus = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === 'ALL') params.delete('status')
+    else params.set('status', value)
+    router.replace(`${pathname}${params.toString() ? `?${params}` : ''}`, { scroll: false })
+    setPage(1)
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+  const copyId = async (id: string) => {
+    await navigator.clipboard.writeText(id)
+    toast.success('Requisition ID copied')
   }
 
-  const totalPages = Math.ceil(totalCount / pageSize)
-
-  if (isLoading && requisitions.length === 0) {
-    return <div className="p-8 text-center text-gray-500">Loading requisitions...</div>
-  }
+  const hasFilters = status !== 'ALL' || !!search
 
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
-      )}
-
-      <div className="flex gap-4 items-center">
-        <div>
-          <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700 mb-1">
-            Filter by Status
-          </label>
-          <select
-            id="status-filter"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value)
-              setCurrentPage(1)
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <Tabs value={status} onValueChange={setStatus} className="overflow-x-auto">
+          <TabsList>
+            {STATUS_TABS.map(tab => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative sm:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              placeholder="Search title, category or ID…"
+              className="pl-9 pr-8"
+              aria-label="Search requisitions"
+            />
+            {searchInput && (
+              <button
+                onClick={() => setSearchInput('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Select
+            value={sort}
+            onValueChange={value => {
+              setSort(value)
+              setPage(1)
             }}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Statuses</option>
-            <option value="DRAFT">Draft</option>
-            <option value="SUBMITTED">Submitted</option>
-            <option value="UNDER_REVIEW">Under Review</option>
-            <option value="APPROVED">Approved</option>
-            <option value="REJECTED">Rejected</option>
-            <option value="PAID">Paid</option>
-            <option value="CLOSED">Closed</option>
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="sort-by" className="block text-sm font-medium text-gray-700 mb-1">
-            Sort by
-          </label>
-          <select
-            id="sort-by"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'date' | 'amount')}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="date">Date (Newest)</option>
-            <option value="amount">Amount (Highest)</option>
-          </select>
+            <SelectTrigger className="sm:w-44" aria-label="Sort">
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORTS.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {requisitions.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">No requisitions found</p>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-muted/40">
+              <TableRow>
+                <TableHead className="min-w-[16rem]">Requisition</TableHead>
+                {showSubmitter && <TableHead className="hidden lg:table-cell">Requested by</TableHead>}
+                <TableHead className="hidden md:table-cell">Urgency</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Created</TableHead>
+                <TableHead className="w-10">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows === null ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell colSpan={7}>
+                      <Skeleton className="h-9 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : rows.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={7} className="p-6">
+                    <EmptyState
+                      icon={FileText}
+                      title={hasFilters ? 'No matching requisitions' : 'No requisitions yet'}
+                      description={hasFilters ? 'Try a different status or search term.' : 'Create your first requisition to get started.'}
+                      action={
+                        hasFilters ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSearchInput('')
+                              setStatus('ALL')
+                            }}
+                          >
+                            Clear filters
+                          </Button>
+                        ) : (
+                          <Button size="sm" asChild>
+                            <Link href="/requisitions/new">
+                              <FilePlus2 /> New requisition
+                            </Link>
+                          </Button>
+                        )
+                      }
+                      className="border-0"
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map(req => (
+                  <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/requisitions/${req.id}`)}>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <Link
+                          href={`/requisitions/${req.id}`}
+                          onClick={e => e.stopPropagation()}
+                          className="font-medium hover:underline"
+                        >
+                          {req.title}
+                        </Link>
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {req.category}
+                          {req.department?.name && <span>· {req.department.name}</span>}
+                          {!!req._count?.attachments && (
+                            <span className="flex items-center gap-0.5">
+                              · <Paperclip className="h-3 w-3" />
+                              {req._count.attachments}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </TableCell>
+                    {showSubmitter && (
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="flex items-center gap-2">
+                          <UserAvatar name={req.submitter?.name} className="h-6 w-6" />
+                          <span className="truncate text-sm">{req.submitter?.name ?? '—'}</span>
+                        </div>
+                      </TableCell>
+                    )}
+                    <TableCell className="hidden md:table-cell">
+                      <StatusBadge kind="urgency" value={req.urgencyLevel} />
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge value={req.status} />
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatMoney(req.estimatedCost, req.currency)}</TableCell>
+                    <TableCell className="hidden text-right text-muted-foreground sm:table-cell">{formatDate(req.createdAt)}</TableCell>
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Row actions">
+                            <MoreHorizontal />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/requisitions/${req.id}`}>
+                              <Eye /> View details
+                            </Link>
+                          </DropdownMenuItem>
+                          {user?.role === 'ADMIN' && (
+                            <DropdownMenuItem asChild>
+                              <Link href={`/requisitions/${req.id}/edit`}>
+                                <Pencil /> Edit
+                              </Link>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => copyId(req.id)}>
+                            <Copy /> Copy ID
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Title</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Status</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Amount</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Submitted</th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requisitions.map((req) => (
-                  <tr key={req.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">{req.title}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span
-                        className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                          STATUS_COLORS[req.status] || 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {req.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {formatCurrency(req.estimatedCost, req.currency)}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {formatDate(req.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <Link
-                        href={`/requisitions/${req.id}`}
-                        className="text-brand-primary hover:text-red-700 font-semibold transition-colors"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      </div>
 
-          <div className="flex items-center justify-between pt-4">
-            <div className="text-sm text-gray-600">
-              Showing {(currentPage - 1) * pageSize + 1} to{' '}
-              {Math.min(currentPage * pageSize, totalCount)} of {totalCount} requisitions
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-
-              <div className="flex items-center gap-2">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                      currentPage === page
-                        ? 'bg-brand-primary text-white'
-                        : 'border border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      <PaginationBar page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} noun="requisitions" />
     </div>
   )
 }

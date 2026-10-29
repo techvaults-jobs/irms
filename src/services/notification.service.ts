@@ -545,4 +545,81 @@ export class NotificationService {
       where: { userId },
     })
   }
+
+  // ==========================================================================
+  // Account registration emails
+  // The in-app Notification model is tied to a requisition, so account events
+  // are delivered by email only. Failures are logged and never block the flow.
+  // ==========================================================================
+
+  private static appUrl() {
+    return process.env.NEXTAUTH_URL || 'http://localhost:3000'
+  }
+
+  /**
+   * Tell every active admin that a new registration is awaiting review
+   */
+  static async notifyAdminsOfRegistration(user: { name: string; email: string; department?: { name: string } | null }) {
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN', isActive: true, accountStatus: 'APPROVED' },
+      select: { email: true },
+    })
+
+    const reviewUrl = `${this.appUrl()}/users?tab=pending`
+    const department = user.department?.name ?? 'Not specified'
+
+    await Promise.all(
+      admins.map(admin =>
+        this.sendEmail(
+          admin.email,
+          `New account request: ${user.name}`,
+          `
+            <h2>New Account Request</h2>
+            <p>A staff member has requested access to IRMS:</p>
+            <ul>
+              <li><strong>Name:</strong> ${user.name}</li>
+              <li><strong>Email:</strong> ${user.email}</li>
+              <li><strong>Department:</strong> ${department}</li>
+            </ul>
+            <p><a href="${reviewUrl}">Review pending requests</a></p>
+          `,
+          `New account request from ${user.name} (${user.email}), ${department}. Review: ${reviewUrl}`
+        )
+      )
+    )
+  }
+
+  /**
+   * Tell the applicant their account is ready
+   */
+  static async notifyAccountApproved(user: { name: string; email: string; role: string }) {
+    const loginUrl = `${this.appUrl()}/auth/login`
+    await this.sendEmail(
+      user.email,
+      'Your IRMS account has been approved',
+      `
+        <h2>Welcome to IRMS, ${user.name}!</h2>
+        <p>Your account has been approved with the <strong>${user.role}</strong> role.</p>
+        <p><a href="${loginUrl}">Sign in to get started</a></p>
+      `,
+      `Your IRMS account has been approved with the ${user.role} role. Sign in: ${loginUrl}`
+    )
+  }
+
+  /**
+   * Tell the applicant their request was declined, with the admin's reason
+   */
+  static async notifyAccountRejected(user: { name: string; email: string }, reason: string) {
+    await this.sendEmail(
+      user.email,
+      'Update on your IRMS account request',
+      `
+        <h2>Account Request Declined</h2>
+        <p>Hi ${user.name}, your request for an IRMS account was not approved.</p>
+        <p><strong>Reason:</strong> ${reason}</p>
+        <p>If you believe this is a mistake, please contact your administrator.</p>
+      `,
+      `Hi ${user.name}, your IRMS account request was not approved. Reason: ${reason}`
+    )
+  }
 }

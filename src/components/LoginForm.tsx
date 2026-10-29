@@ -1,257 +1,190 @@
 'use client'
 
 import { signIn } from 'next-auth/react'
-import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Lock, Mail, Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { AlertCircle, ArrowRight, Hourglass, Loader2, Mail, UserX } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/auth/password-input'
+import { FieldError } from '@/components/auth/field-error'
+
+type LoginError = 'invalid' | 'pending' | 'rejected' | 'inactive' | 'network' | 'server'
+
+const ERRORS: Record<LoginError, { title: string; message: string; icon: typeof AlertCircle; variant: 'destructive' | 'default' }> = {
+  invalid: {
+    title: 'Invalid credentials',
+    message: 'The email or password you entered is incorrect.',
+    icon: AlertCircle,
+    variant: 'destructive',
+  },
+  pending: {
+    title: 'Awaiting approval',
+    message: 'Your account request has been received. An administrator needs to approve it before you can sign in.',
+    icon: Hourglass,
+    variant: 'default',
+  },
+  rejected: {
+    title: 'Account request declined',
+    message: 'Your registration was not approved. Contact your administrator, or submit a new request.',
+    icon: UserX,
+    variant: 'destructive',
+  },
+  inactive: {
+    title: 'Account deactivated',
+    message: 'Your account has been deactivated. Contact your administrator to restore access.',
+    icon: UserX,
+    variant: 'destructive',
+  },
+  network: {
+    title: 'Connection error',
+    message: 'Unable to reach the server. Check your connection and try again.',
+    icon: AlertCircle,
+    variant: 'destructive',
+  },
+  server: {
+    title: 'Sign-in failed',
+    message: 'Something went wrong on our side. Please try again in a moment.',
+    icon: AlertCircle,
+    variant: 'destructive',
+  },
+}
+
+const CODE_TO_ERROR: Record<string, LoginError> = {
+  account_pending: 'pending',
+  account_rejected: 'rejected',
+  account_inactive: 'inactive',
+}
 
 export function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
-  const [errorType, setErrorType] = useState<'invalid' | 'network' | 'server' | null>(null)
+  const [error, setError] = useState<LoginError | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [validationErrors, setValidationErrors] = useState<{ email?: string; password?: string }>({})
 
-  // Load email and password from URL params on mount
   useEffect(() => {
     const emailParam = searchParams.get('email')
-    const passwordParam = searchParams.get('password')
-    
-    if (emailParam) {
-      setEmail(decodeURIComponent(emailParam))
-    }
-    if (passwordParam) {
-      setPassword(decodeURIComponent(passwordParam))
-    }
+    if (emailParam) setEmail(decodeURIComponent(emailParam))
   }, [searchParams])
 
   const validateForm = () => {
     const errors: { email?: string; password?: string } = {}
-    
-    if (!email) {
-      errors.email = 'Email is required'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.email = 'Please enter a valid email address'
-    }
-    
-    if (!password) {
-      errors.password = 'Password is required'
-    } else if (password.length < 6) {
-      errors.password = 'Password must be at least 6 characters'
-    }
-    
+    if (!email) errors.email = 'Email is required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Enter a valid email address'
+    if (!password) errors.password = 'Password is required'
+    else if (password.length < 6) errors.password = 'Password must be at least 6 characters'
     setValidationErrors(errors)
     return Object.keys(errors).length === 0
   }
 
-  const getErrorMessage = (type: string | null) => {
-    switch (type) {
-      case 'invalid':
-        return {
-          title: 'Invalid Credentials',
-          message: 'The email or password you entered is incorrect. Please check and try again.',
-          icon: AlertCircle
-        }
-      case 'network':
-        return {
-          title: 'Connection Error',
-          message: 'Unable to connect to the server. Please check your internet connection and try again.',
-          icon: AlertCircle
-        }
-      case 'server':
-        return {
-          title: 'Server Error',
-          message: 'The server is temporarily unavailable. Please try again in a moment.',
-          icon: AlertCircle
-        }
-      default:
-        return {
-          title: 'Login Failed',
-          message: 'An unexpected error occurred. Please try again.',
-          icon: AlertCircle
-        }
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    e.stopPropagation()
-    
-    if (!validateForm()) {
-      return
-    }
-    
-    setError('')
-    setErrorType(null)
+    if (!validateForm()) return
+
+    setError(null)
     setIsLoading(true)
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      })
+      const result = await signIn('credentials', { email, password, redirect: false })
 
       if (!result) {
-        setError('No response from authentication server')
-        setErrorType('server')
-        setIsLoading(false)
+        setError('server')
+      } else if (result.error) {
+        const code = (result as { code?: string }).code
+        setError(code && CODE_TO_ERROR[code] ? CODE_TO_ERROR[code] : result.error.includes('CredentialsSignin') ? 'invalid' : 'server')
+      } else if (result.ok) {
+        const callbackUrl = searchParams.get('callbackUrl')
+        // Hard redirect so the new session cookie is picked up everywhere
+        window.location.href = callbackUrl?.startsWith('/') ? callbackUrl : '/dashboard'
         return
-      }
-
-      if (result?.error) {
-        // Determine error type based on error message
-        if (result.error.includes('CredentialsSignin')) {
-          setErrorType('invalid')
-          setError('Invalid email or password. Please try again.')
-        } else if (result.error.includes('network') || result.error.includes('fetch')) {
-          setErrorType('network')
-          setError('Network connection error. Please check your internet and try again.')
-        } else {
-          setErrorType('server')
-          setError(result.error || 'Authentication failed. Please try again.')
-        }
-        setIsLoading(false)
-      } else if (result?.ok) {
-        // Use window.location for a hard redirect to ensure session is established
-        window.location.href = '/dashboard'
       } else {
-        setErrorType('server')
-        setError('An unexpected error occurred. Please try again.')
-        setIsLoading(false)
+        setError('server')
       }
-    } catch (err: any) {
-      setErrorType('network')
-      setError('An error occurred. Please check your connection and try again.')
-      setIsLoading(false)
+    } catch {
+      setError('network')
     }
+    setIsLoading(false)
   }
 
+  const registered = searchParams.get('registered') === '1'
+  const info = error ? ERRORS[error] : null
+
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <h3 className="font-semibold text-red-900 text-sm">
-              {getErrorMessage(errorType).title}
-            </h3>
-            <p className="text-red-700 text-sm mt-1">
-              {error}
-            </p>
-          </div>
-        </div>
+    <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+      {registered && !error && (
+        <Alert className="border-success/30 bg-success/5">
+          <Hourglass className="h-4 w-4 !text-success" />
+          <AlertTitle>Request submitted</AlertTitle>
+          <AlertDescription>
+            Your account is pending approval. You&apos;ll be able to sign in once an administrator approves it.
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="space-y-4">
-        {/* Email Input */}
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-            Email Address
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Mail className={`h-5 w-5 ${validationErrors.email ? 'text-red-400' : 'text-gray-400'}`} />
-            </div>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className={`block w-full pl-10 pr-4 py-3 border rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent transition-all text-sm ${
-                validationErrors.email
-                  ? 'border-red-300 focus:ring-red-500 bg-red-50'
-                  : 'border-gray-300 focus:ring-red-500'
-              }`}
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value)
-                if (validationErrors.email) {
-                  setValidationErrors({ ...validationErrors, email: undefined })
-                }
-              }}
-            />
-          </div>
-          {validationErrors.email && (
-            <p className="text-red-600 text-xs mt-1.5 flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              {validationErrors.email}
-            </p>
-          )}
-        </div>
+      {info && (
+        <Alert variant={info.variant} className={info.variant === 'default' ? 'border-warning/30 bg-warning/5' : undefined}>
+          <info.icon className={info.variant === 'default' ? 'h-4 w-4 !text-warning' : 'h-4 w-4'} />
+          <AlertTitle>{info.title}</AlertTitle>
+          <AlertDescription>
+            {info.message}
+            {error === 'rejected' && (
+              <Link href="/auth/register" className="mt-1 block font-medium underline underline-offset-4">
+                Submit a new request
+              </Link>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {/* Password Input */}
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-            Password
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Lock className={`h-5 w-5 ${validationErrors.password ? 'text-red-400' : 'text-gray-400'}`} />
-            </div>
-            <input
-              id="password"
-              name="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete="current-password"
-              required
-              className={`block w-full pl-10 pr-12 py-3 border rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:border-transparent transition-all text-sm ${
-                validationErrors.password
-                  ? 'border-red-300 focus:ring-red-500 bg-red-50'
-                  : 'border-gray-300 focus:ring-red-500'
-              }`}
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value)
-                if (validationErrors.password) {
-                  setValidationErrors({ ...validationErrors, password: undefined })
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700 transition-colors"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
-            </button>
-          </div>
-          {validationErrors.password && (
-            <p className="text-red-600 text-xs mt-1.5 flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              {validationErrors.password}
-            </p>
-          )}
+      <div className="space-y-2">
+        <Label htmlFor="email">Work email</Label>
+        <div className="relative">
+          <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@techvaults.com"
+            className="pl-9"
+            value={email}
+            aria-invalid={!!validationErrors.email}
+            onChange={e => {
+              setEmail(e.target.value)
+              setValidationErrors(v => ({ ...v, email: undefined }))
+            }}
+          />
         </div>
+        <FieldError message={validationErrors.email} />
       </div>
 
-      {/* Submit Button */}
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-red-600 to-red-700 text-white font-semibold rounded-lg hover:from-red-700 hover:to-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Signing in...
-          </>
-        ) : (
-          'Sign in'
-        )}
-      </button>
+      <div className="space-y-2">
+        <Label htmlFor="password">Password</Label>
+        <PasswordInput
+          id="password"
+          name="password"
+          autoComplete="current-password"
+          placeholder="••••••••"
+          value={password}
+          aria-invalid={!!validationErrors.password}
+          onChange={e => {
+            setPassword(e.target.value)
+            setValidationErrors(v => ({ ...v, password: undefined }))
+          }}
+        />
+        <FieldError message={validationErrors.password} />
+      </div>
+
+      <Button type="submit" className="h-10 w-full" disabled={isLoading}>
+        {isLoading ? <Loader2 className="animate-spin" /> : null}
+        {isLoading ? 'Signing in…' : 'Sign in'}
+        {!isLoading && <ArrowRight />}
+      </Button>
     </form>
   )
 }

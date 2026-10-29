@@ -29,6 +29,13 @@ export async function PATCH(
     const userId = params.id
     const body = await req.json()
 
+    if (userId === session.user.id && ((body.role && body.role !== 'ADMIN') || body.isActive === false)) {
+      return NextResponse.json(
+        { error: 'You cannot remove your own admin access' },
+        { status: 400 }
+      )
+    }
+
     // Get current user to track role changes
     const currentUser = await UserService.getUserById(userId)
     if (!currentUser) {

@@ -19,9 +19,17 @@ model User {
   departmentId  String
   department    Department @relation(fields: [departmentId], references: [id])
   isActive      Boolean   @default(true)
+  accountStatus AccountStatus @default(APPROVED)
+  jobTitle      String?
+  phone         String?
+  reviewedById  String?
+  reviewedBy    User?     @relation("UserReviews", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  rejectionReason String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  reviewedUsers          User[] @relation("UserReviews")
   requisitions           Requisition[]
   approvalSteps          ApprovalStep[]
   auditTrails            AuditTrail[]
@@ -32,6 +40,15 @@ model User {
 
   @@index([email])
   @@index([departmentId])
+  @@index([accountStatus])
+}
+
+// Self-registered accounts start as PENDING until an admin reviews them.
+// Admin-created accounts are APPROVED immediately.
+enum AccountStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model Department {

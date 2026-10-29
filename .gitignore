@@ -49,3 +49,5 @@ scripts/
 # Build artifacts
 dist/
 .turbo/
+.vercel
+.env*

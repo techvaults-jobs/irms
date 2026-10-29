@@ -2,8 +2,23 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, CheckCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import { Loader2, Paperclip, Save, Send } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { FieldError } from '@/components/auth/field-error'
+import { StatusBadge } from '@/components/shared/status-badge'
+import { FileDropzone, uploadAttachment } from '@/components/attachments/file-dropzone'
 import { useCSRFToken, addCSRFTokenToRequest } from '@/hooks/useCSRFToken'
+import { URGENCY } from '@/lib/status'
+import { cn, formatMoney, getApiErrorMessage } from '@/lib/utils'
 
 interface RequisitionFormProps {
   initialData?: {
@@ -15,17 +30,36 @@ interface RequisitionFormProps {
     currency: string
     urgencyLevel: string
     businessJustification: string
+    status?: string
+    attachments?: unknown[]
   }
   isEditing?: boolean
+  onCancel?: () => void
 }
 
-export function RequisitionForm({ initialData, isEditing = false }: RequisitionFormProps) {
+const CATEGORY_SUGGESTIONS = ['Office Supplies', 'IT Equipment', 'Software', 'Travel', 'Training', 'Maintenance', 'Marketing', 'Logistics']
+
+const CURRENCIES = [
+  { value: 'NGN', label: 'NGN — Nigerian Naira' },
+  { value: 'USD', label: 'USD — US Dollar' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'GBP', label: 'GBP — British Pound' },
+  { value: 'CAD', label: 'CAD — Canadian Dollar' },
+]
+
+const URGENCY_HELP: Record<string, string> = {
+  LOW: 'Within a month',
+  MEDIUM: 'Within two weeks',
+  HIGH: 'Within a few days',
+  CRITICAL: 'Blocking work now',
+}
+
+export function RequisitionForm({ initialData, isEditing = false, onCancel }: RequisitionFormProps) {
   const router = useRouter()
   const csrfToken = useCSRFToken()
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [pending, setPending] = useState<'draft' | 'submit' | null>(null)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [files, setFiles] = useState<File[]>([])
 
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
@@ -37,350 +71,284 @@ export function RequisitionForm({ initialData, isEditing = false }: RequisitionF
     businessJustification: initialData?.businessJustification || '',
   })
 
+  const canAttach = !isEditing || initialData?.status === 'DRAFT'
+  const existingAttachments = initialData?.attachments?.length ?? 0
+
+  const setField = (name: keyof typeof formData, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }))
+    if (validationErrors[name]) setValidationErrors(prev => ({ ...prev, [name]: '' }))
+  }
+
   const validateForm = () => {
     const errors: Record<string, string> = {}
-
-    if (!formData.title.trim()) {
-      errors.title = 'Title is required'
-    }
-    if (!formData.category.trim()) {
-      errors.category = 'Category is required'
-    }
-    if (!formData.description.trim()) {
-      errors.description = 'Description is required'
-    }
-    if (!formData.estimatedCost) {
-      errors.estimatedCost = 'Estimated cost is required'
-    } else if (parseFloat(formData.estimatedCost) <= 0) {
-      errors.estimatedCost = 'Estimated cost must be greater than 0'
-    }
-    if (!formData.businessJustification.trim()) {
-      errors.businessJustification = 'Business justification is required'
-    }
-
+    if (!formData.title.trim()) errors.title = 'Title is required'
+    if (!formData.category.trim()) errors.category = 'Category is required'
+    if (!formData.description.trim()) errors.description = 'Description is required'
+    if (!formData.estimatedCost) errors.estimatedCost = 'Estimated cost is required'
+    else if (parseFloat(formData.estimatedCost) <= 0) errors.estimatedCost = 'Must be greater than 0'
+    if (!formData.businessJustification.trim()) errors.businessJustification = 'Business justification is required'
     setValidationErrors(errors)
+    if (Object.keys(errors).length) toast.error('Please fix the highlighted fields')
     return Object.keys(errors).length === 0
   }
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }))
-    // Clear validation error for this field
-    if (validationErrors[name]) {
-      setValidationErrors(prev => ({
-        ...prev,
-        [name]: '',
-      }))
-    }
-  }
-
-  const handleSaveDraft = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!validateForm()) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const url = isEditing
-        ? `/api/requisitions/${initialData?.id}`
-        : '/api/requisitions'
-      const method = isEditing ? 'PATCH' : 'POST'
-
-      const requestOptions = addCSRFTokenToRequest(
-        {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        },
+  const request = async (url: string, method: string, body?: unknown) => {
+    const response = await fetch(
+      url,
+      addCSRFTokenToRequest(
+        { method, headers: { 'Content-Type': 'application/json' }, ...(body !== undefined && { body: JSON.stringify(body) }) },
         csrfToken
       )
+    )
+    const data = await response.json().catch(() => null)
+    if (!response.ok) throw new Error(getApiErrorMessage(data, 'Request failed'))
+    return data
+  }
 
-      const response = await fetch(url, requestOptions)
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to save requisition')
-      }
-
-      const result = await response.json()
-      setSuccess(true)
-      setTimeout(() => {
-        router.push(`/requisitions/${result.id}`)
-      }, 1500)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
+  const uploadFiles = async (requisitionId: string) => {
+    for (const file of files) {
+      await uploadAttachment(requisitionId, file)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const save = async (mode: 'draft' | 'submit') => {
     if (!validateForm()) return
-
-    setIsLoading(true)
-    setError(null)
+    setPending(mode)
 
     try {
-      // First save the requisition if it's new
       let requisitionId = initialData?.id
-      if (!isEditing) {
-        const createRequestOptions = addCSRFTokenToRequest(
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData),
-          },
-          csrfToken
-        )
-
-        const createResponse = await fetch('/api/requisitions', createRequestOptions)
-
-        if (!createResponse.ok) {
-          const data = await createResponse.json()
-          throw new Error(data.error || 'Failed to create requisition')
-        }
-
-        const created = await createResponse.json()
-        requisitionId = created.id
+      if (isEditing && requisitionId) {
+        await request(`/api/requisitions/${requisitionId}`, 'PATCH', formData)
       } else {
-        // Update existing requisition
-        const updateRequestOptions = addCSRFTokenToRequest(
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData),
-          },
-          csrfToken
-        )
+        const created = await request('/api/requisitions', 'POST', formData)
+        requisitionId = created.id as string
+      }
 
-        const updateResponse = await fetch(`/api/requisitions/${requisitionId}`, updateRequestOptions)
-
-        if (!updateResponse.ok) {
-          const data = await updateResponse.json()
-          throw new Error(data.error || 'Failed to update requisition')
-        }
-
-        // For editing, just save and redirect - don't try to submit
-        setSuccess(true)
-        setTimeout(() => {
+      if (files.length && requisitionId) {
+        try {
+          await uploadFiles(requisitionId)
+        } catch (err) {
+          // The requisition is saved; leave it as a draft so attachments can be retried
+          toast.error(err instanceof Error ? err.message : 'Attachment upload failed', {
+            description: 'Your requisition was saved as a draft. Add the attachment from its page, then submit.',
+          })
           router.push(`/requisitions/${requisitionId}`)
-        }, 1500)
-        return
+          return
+        }
       }
 
-      // Submit the requisition (only for new requisitions)
-      const submitRequestOptions = addCSRFTokenToRequest(
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        },
-        csrfToken
-      )
-
-      const submitResponse = await fetch(`/api/requisitions/${requisitionId}/submit`, submitRequestOptions)
-
-      if (!submitResponse.ok) {
-        const data = await submitResponse.json()
-        throw new Error(data.error || 'Failed to submit requisition')
+      if (mode === 'submit' && !isEditing) {
+        await request(`/api/requisitions/${requisitionId}/submit`, 'POST')
+        toast.success('Requisition submitted', { description: 'It has been routed to the required approvers.' })
+      } else {
+        toast.success(isEditing ? 'Changes saved' : 'Draft saved')
       }
 
-      setSuccess(true)
-      setTimeout(() => {
-        router.push(`/requisitions/${requisitionId}`)
-      }, 1500)
+      router.push(`/requisitions/${requisitionId}`)
+      router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
+      toast.error(err instanceof Error ? err.message : 'Something went wrong')
+      setPending(null)
     }
   }
+
+  const amount = parseFloat(formData.estimatedCost) || 0
 
   return (
-    <form className="space-y-6 max-w-2xl">
-      {error && (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
-      )}
+    <form
+      className="grid gap-6 lg:grid-cols-[1fr_20rem]"
+      onSubmit={e => {
+        e.preventDefault()
+        save(isEditing ? 'draft' : 'submit')
+      }}
+      noValidate
+    >
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">What do you need?</CardTitle>
+            <CardDescription>Give approvers a clear picture of the request.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input id="title" value={formData.title} onChange={e => setField('title', e.target.value)} placeholder="e.g. Replacement laptops for design team" aria-invalid={!!validationErrors.title} />
+              <FieldError message={validationErrors.title} />
+            </div>
 
-      {success && (
-        <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          <p className="text-sm text-green-700">
-            {isEditing ? 'Requisition updated successfully!' : 'Requisition created successfully!'}
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Input id="category" value={formData.category} onChange={e => setField('category', e.target.value)} placeholder="e.g. IT Equipment" aria-invalid={!!validationErrors.category} />
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORY_SUGGESTIONS.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setField('category', cat)}
+                    className={cn(
+                      'rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:border-primary/50 hover:bg-accent',
+                      formData.category === cat && 'border-primary bg-primary/10 text-primary'
+                    )}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              <FieldError message={validationErrors.category} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea id="description" rows={4} value={formData.description} onChange={e => setField('description', e.target.value)} placeholder="Items, quantities, vendors, specifications…" aria-invalid={!!validationErrors.description} />
+              <FieldError message={validationErrors.description} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Cost & priority</CardTitle>
+            <CardDescription>The amount determines which approval rules apply.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-[1fr_14rem]">
+              <div className="space-y-2">
+                <Label htmlFor="estimatedCost">Estimated cost</Label>
+                <Input id="estimatedCost" type="number" inputMode="decimal" min="0" step="0.01" value={formData.estimatedCost} onChange={e => setField('estimatedCost', e.target.value)} placeholder="0.00" className="tabular-nums" aria-invalid={!!validationErrors.estimatedCost} />
+                <FieldError message={validationErrors.estimatedCost} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <Select value={formData.currency} onValueChange={value => setField('currency', value)}>
+                  <SelectTrigger id="currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CURRENCIES.map(c => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Urgency</Label>
+              <RadioGroup value={formData.urgencyLevel} onValueChange={value => setField('urgencyLevel', value)} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {Object.entries(URGENCY).map(([value, meta]) => (
+                  <Label
+                    key={value}
+                    htmlFor={`urgency-${value}`}
+                    className={cn(
+                      'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 font-normal transition-colors hover:bg-accent/50',
+                      formData.urgencyLevel === value && 'border-primary bg-primary/5 ring-1 ring-primary'
+                    )}
+                  >
+                    <span className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-sm font-medium">
+                        <meta.icon className="h-4 w-4" />
+                        {meta.label}
+                      </span>
+                      <RadioGroupItem value={value} id={`urgency-${value}`} />
+                    </span>
+                    <span className="text-xs text-muted-foreground">{URGENCY_HELP[value]}</span>
+                  </Label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="businessJustification">Business justification</Label>
+              <Textarea id="businessJustification" rows={3} value={formData.businessJustification} onChange={e => setField('businessJustification', e.target.value)} placeholder="Why is this needed, and what happens if it isn't approved?" aria-invalid={!!validationErrors.businessJustification} />
+              <FieldError message={validationErrors.businessJustification} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {canAttach && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Paperclip className="h-4 w-4" /> Attachments
+                <Badge variant="muted" className="font-normal">
+                  Optional
+                </Badge>
+              </CardTitle>
+              <CardDescription>Quotes, invoices or specs. Attachments can only be added while the requisition is a draft.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FileDropzone files={files} onChange={setFiles} existingCount={existingAttachments} disabled={!!pending} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Summary</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Estimated cost</p>
+              <p className="text-2xl font-semibold tabular-nums">{formatMoney(amount, formData.currency)}</p>
+            </div>
+            <Separator />
+            <dl className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">Status</dt>
+                <dd><StatusBadge value={initialData?.status ?? 'DRAFT'} /></dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">Urgency</dt>
+                <dd><StatusBadge kind="urgency" value={formData.urgencyLevel} /></dd>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <dt className="text-muted-foreground">Category</dt>
+                <dd className="truncate font-medium">{formData.category || '—'}</dd>
+              </div>
+              {canAttach && (
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="text-muted-foreground">Attachments</dt>
+                  <dd className="font-medium tabular-nums">{existingAttachments + files.length}</dd>
+                </div>
+              )}
+            </dl>
+            <Separator />
+            <div className="flex flex-col gap-2">
+              {isEditing ? (
+                <Button type="submit" disabled={!!pending}>
+                  {pending ? <Loader2 className="animate-spin" /> : <Save />}
+                  Save changes
+                </Button>
+              ) : (
+                <>
+                  <Button type="submit" disabled={!!pending}>
+                    {pending === 'submit' ? <Loader2 className="animate-spin" /> : <Send />}
+                    Submit for approval
+                  </Button>
+                  <Button type="button" variant="outline" disabled={!!pending} onClick={() => save('draft')}>
+                    {pending === 'draft' ? <Loader2 className="animate-spin" /> : <Save />}
+                    Save as draft
+                  </Button>
+                </>
+              )}
+              {onCancel && (
+                <Button type="button" variant="ghost" disabled={!!pending} onClick={onCancel}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        {!isEditing && (
+          <p className="px-1 text-xs text-muted-foreground">
+            Submitting routes the requisition to approvers based on the amount. You won&apos;t be able to edit it afterwards.
           </p>
-        </div>
-      )}
-
-      <div>
-        <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-          Title *
-        </label>
-        <input
-          type="text"
-          id="title"
-          name="title"
-          value={formData.title}
-          onChange={handleInputChange}
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.title ? 'border-red-500' : 'border-gray-300'
-          }`}
-          placeholder="Enter requisition title"
-        />
-        {validationErrors.title && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.title}</p>
         )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-            Category *
-          </label>
-          <input
-            type="text"
-            id="category"
-            name="category"
-            value={formData.category}
-            onChange={handleInputChange}
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              validationErrors.category ? 'border-red-500' : 'border-gray-300'
-            }`}
-            placeholder="e.g., Office Supplies"
-          />
-          {validationErrors.category && (
-            <p className="text-sm text-red-600 mt-1">{validationErrors.category}</p>
-          )}
-        </div>
-
-        <div>
-          <label htmlFor="urgencyLevel" className="block text-sm font-medium text-gray-700 mb-1">
-            Urgency Level *
-          </label>
-          <select
-            id="urgencyLevel"
-            name="urgencyLevel"
-            value={formData.urgencyLevel}
-            onChange={handleInputChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="LOW">Low</option>
-            <option value="MEDIUM">Medium</option>
-            <option value="HIGH">High</option>
-            <option value="CRITICAL">Critical</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-          Description *
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          value={formData.description}
-          onChange={handleInputChange}
-          rows={4}
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.description ? 'border-red-500' : 'border-gray-300'
-          }`}
-          placeholder="Provide detailed description of what is needed"
-        />
-        {validationErrors.description && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.description}</p>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="estimatedCost" className="block text-sm font-medium text-gray-700 mb-1">
-            Estimated Cost *
-          </label>
-          <input
-            type="number"
-            id="estimatedCost"
-            name="estimatedCost"
-            value={formData.estimatedCost}
-            onChange={handleInputChange}
-            step="0.01"
-            min="0"
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              validationErrors.estimatedCost ? 'border-red-500' : 'border-gray-300'
-            }`}
-            placeholder="0.00"
-          />
-          {validationErrors.estimatedCost && (
-            <p className="text-sm text-red-600 mt-1">{validationErrors.estimatedCost}</p>
-          )}
-        </div>
-
-        <div>
-          <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
-            Currency *
-          </label>
-          <select
-            id="currency"
-            name="currency"
-            value={formData.currency}
-            onChange={handleInputChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="NGN">NGN - Nigerian Naira</option>
-            <option value="USD">USD - US Dollar</option>
-            <option value="EUR">EUR - Euro</option>
-            <option value="GBP">GBP - British Pound</option>
-            <option value="CAD">CAD - Canadian Dollar</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor="businessJustification" className="block text-sm font-medium text-gray-700 mb-1">
-          Business Justification *
-        </label>
-        <textarea
-          id="businessJustification"
-          name="businessJustification"
-          value={formData.businessJustification}
-          onChange={handleInputChange}
-          rows={3}
-          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-            validationErrors.businessJustification ? 'border-red-500' : 'border-gray-300'
-          }`}
-          placeholder="Explain why this requisition is needed"
-        />
-        {validationErrors.businessJustification && (
-          <p className="text-sm text-red-600 mt-1">{validationErrors.businessJustification}</p>
-        )}
-      </div>
-
-      <div className="flex gap-4 pt-4">
-        <button
-          type="button"
-          onClick={handleSaveDraft}
-          disabled={isLoading}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-        >
-          {isLoading ? 'Saving...' : isEditing ? 'Save Changes' : 'Save as Draft'}
-        </button>
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isLoading}
-          className="px-6 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:opacity-90 active:opacity-80 disabled:opacity-50 transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
-        >
-          {isLoading ? (isEditing ? 'Saving...' : 'Submitting...') : (isEditing ? 'Save & Close' : 'Submit Requisition')}
-        </button>
-      </div>
+      </aside>
     </form>
   )
 }

@@ -1,8 +1,46 @@
 import { prisma } from '@/lib/prisma'
-import { UserRole } from '@prisma/client'
+import { AccountStatus, Prisma, UserRole } from '@prisma/client'
 import { AuditTrailService } from './audit-trail.service'
 import { ReferentialIntegrityChecker } from '@/lib/referential-integrity'
 import bcrypt from 'bcryptjs'
+
+/**
+ * Fields safe to return to clients — never includes the password hash.
+ */
+export const publicUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  departmentId: true,
+  department: { select: { id: true, name: true } },
+  isActive: true,
+  accountStatus: true,
+  jobTitle: true,
+  phone: true,
+  reviewedAt: true,
+  reviewedBy: { select: { id: true, name: true } },
+  rejectionReason: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.UserSelect
+
+export interface RegisterUserInput {
+  email: string
+  name: string
+  password: string
+  departmentId: string
+  jobTitle?: string
+  phone?: string
+}
+
+export interface ListUsersFilters {
+  accountStatus?: AccountStatus
+  role?: UserRole
+  search?: string
+}
+
+export class AccountExistsError extends Error {}
 
 export interface CreateUserInput {
   email: string
@@ -47,10 +85,147 @@ export class UserService {
         role: input.role,
         password: hashedPassword,
         isActive: true,
+        accountStatus: 'APPROVED',
       },
+      select: publicUserSelect,
     })
 
     return user
+  }
+
+  /**
+   * Self-service registration. The account is created PENDING and inactive
+   * until an admin approves it. A previously rejected email may re-apply.
+   */
+  static async registerUser(input: RegisterUserInput) {
+    await ReferentialIntegrityChecker.validateDepartmentExists(input.departmentId)
+
+    const existing = await prisma.user.findFirst({
+      where: { email: { equals: input.email, mode: 'insensitive' } },
+      select: { id: true, accountStatus: true },
+    })
+
+    if (existing && existing.accountStatus !== 'REJECTED') {
+      throw new AccountExistsError(
+        existing.accountStatus === 'PENDING'
+          ? 'A registration for this email is already awaiting approval'
+          : 'An account with this email already exists'
+      )
+    }
+
+    const hashedPassword = await bcrypt.hash(input.password, 10)
+    const data = {
+      name: input.name,
+      password: hashedPassword,
+      departmentId: input.departmentId,
+      jobTitle: input.jobTitle ?? null,
+      phone: input.phone ?? null,
+      role: 'STAFF' as UserRole,
+      isActive: false,
+      accountStatus: 'PENDING' as AccountStatus,
+      reviewedById: null,
+      reviewedAt: null,
+      rejectionReason: null,
+    }
+
+    if (existing) {
+      return prisma.user.update({
+        where: { id: existing.id },
+        data,
+        select: publicUserSelect,
+      })
+    }
+
+    return prisma.user.create({
+      data: { ...data, email: input.email },
+      select: publicUserSelect,
+    })
+  }
+
+  /**
+   * Approve a pending registration and grant access with the chosen role.
+   */
+  static async approveAccount(
+    userId: string,
+    adminId: string,
+    options: { role: UserRole; departmentId?: string }
+  ) {
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) {
+      throw new Error('User not found')
+    }
+    if (user.accountStatus === 'APPROVED') {
+      throw new Error('Account is already approved')
+    }
+
+    ReferentialIntegrityChecker.validateUserRole(options.role)
+    if (options.departmentId) {
+      await ReferentialIntegrityChecker.validateDepartmentExists(options.departmentId)
+    }
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        accountStatus: 'APPROVED',
+        isActive: true,
+        role: options.role,
+        ...(options.departmentId && { departmentId: options.departmentId }),
+        reviewedById: adminId,
+        reviewedAt: new Date(),
+        rejectionReason: null,
+      },
+      select: publicUserSelect,
+    })
+  }
+
+  /**
+   * Reject a pending registration. The user cannot sign in, but may re-apply.
+   */
+  static async rejectAccount(userId: string, adminId: string, reason: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) {
+      throw new Error('User not found')
+    }
+    if (user.accountStatus !== 'PENDING') {
+      throw new Error('Only pending registrations can be rejected')
+    }
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        accountStatus: 'REJECTED',
+        isActive: false,
+        reviewedById: adminId,
+        reviewedAt: new Date(),
+        rejectionReason: reason,
+      },
+      select: publicUserSelect,
+    })
+  }
+
+  /**
+   * Counts used by the admin user-management overview.
+   */
+  static async getAccountStats() {
+    const [byStatus, active, inactive] = await Promise.all([
+      prisma.user.groupBy({ by: ['accountStatus'], _count: { _all: true } }),
+      prisma.user.count({ where: { accountStatus: 'APPROVED', isActive: true } }),
+      prisma.user.count({ where: { accountStatus: 'APPROVED', isActive: false } }),
+    ])
+
+    const counts = { PENDING: 0, APPROVED: 0, REJECTED: 0 }
+    for (const row of byStatus) {
+      counts[row.accountStatus] = row._count._all
+    }
+
+    return {
+      total: counts.PENDING + counts.APPROVED + counts.REJECTED,
+      pending: counts.PENDING,
+      approved: counts.APPROVED,
+      rejected: counts.REJECTED,
+      active,
+      inactive,
+    }
   }
 
   /**
@@ -80,17 +255,28 @@ export class UserService {
   /**
    * List all users with pagination
    */
-  static async listUsers(skip = 0, take = 20) {
-    const users = await prisma.user.findMany({
-      skip,
-      take,
-      include: {
-        department: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+  static async listUsers(skip = 0, take = 20, filters: ListUsersFilters = {}) {
+    const where: Prisma.UserWhereInput = {
+      ...(filters.accountStatus && { accountStatus: filters.accountStatus }),
+      ...(filters.role && { role: filters.role }),
+      ...(filters.search && {
+        OR: [
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { email: { contains: filters.search, mode: 'insensitive' } },
+        ],
+      }),
+    }
 
-    const total = await prisma.user.count()
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take,
+        select: publicUserSelect,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.user.count({ where }),
+    ])
 
     return { users, total }
   }
@@ -106,6 +292,10 @@ export class UserService {
 
     if (!currentUser) {
       throw new Error('User not found')
+    }
+
+    if (input.isActive && currentUser.accountStatus !== 'APPROVED') {
+      throw new Error('Approve this registration before activating the account')
     }
 
     // Validate referential integrity
@@ -126,9 +316,7 @@ export class UserService {
         ...(input.departmentId && { departmentId: input.departmentId }),
         ...(input.isActive !== undefined && { isActive: input.isActive }),
       },
-      include: {
-        department: true,
-      },
+      select: publicUserSelect,
     })
 
     // Record role change in audit trail if role was changed
@@ -161,9 +349,7 @@ export class UserService {
     return prisma.user.update({
       where: { id: userId },
       data: { isActive: false },
-      include: {
-        department: true,
-      },
+      select: publicUserSelect,
     })
   }
 
@@ -183,12 +369,14 @@ export class UserService {
       throw new Error('User is already active')
     }
 
+    if (user.accountStatus !== 'APPROVED') {
+      throw new Error('Approve this registration before activating the account')
+    }
+
     return prisma.user.update({
       where: { id: userId },
       data: { isActive: true },
-      include: {
-        department: true,
-      },
+      select: publicUserSelect,
     })
   }
 

@@ -1,10 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { AlertCircle, CheckCircle, Copy, RefreshCw } from 'lucide-react'
-import { Decimal } from '@prisma/client/runtime/library'
-import { formatCurrency } from '@/lib/utils'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { AlertTriangle, Copy, Loader2, RefreshCw, Wallet } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { FieldError } from '@/components/auth/field-error'
 import { PaymentReferenceGenerator } from '@/lib/payment-reference-generator'
+import { cn, formatMoney, getApiErrorMessage, toNumber } from '@/lib/utils'
 
 interface PaymentRecordingFormProps {
   requisitionId: string
@@ -13,18 +22,12 @@ interface PaymentRecordingFormProps {
   onPaymentRecorded?: () => void
 }
 
-export function PaymentRecordingForm({
-  requisitionId,
-  approvedCost,
-  currency,
-  onPaymentRecorded,
-}: PaymentRecordingFormProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
-  const [showVarianceWarning, setShowVarianceWarning] = useState(false)
+const METHODS = ['Bank Transfer', 'Check', 'Credit Card', 'Internal Transfer', 'Cash', 'Other']
+const VARIANCE_THRESHOLD = 0.1
 
+export function PaymentRecordingForm({ requisitionId, approvedCost, currency, onPaymentRecorded }: PaymentRecordingFormProps) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     actualCostPaid: '',
     paymentDate: new Date().toISOString().split('T')[0],
@@ -33,62 +36,26 @@ export function PaymentRecordingForm({
     paymentComment: '',
   })
 
-  const approvedCostNum = typeof approvedCost === 'string' ? parseFloat(approvedCost) : approvedCost
-  const actualCostNum = formData.actualCostPaid ? parseFloat(formData.actualCostPaid) : 0
-  const variance = actualCostNum > 0 ? (actualCostNum - approvedCostNum) / approvedCostNum : 0
-  const varianceThreshold = 0.1 // 10%
-  const exceedsThreshold = variance > varianceThreshold
+  const approved = toNumber(approvedCost)
+  const actual = toNumber(formData.actualCostPaid)
+  const variance = actual > 0 && approved > 0 ? (actual - approved) / approved : 0
+  const exceedsThreshold = variance > VARIANCE_THRESHOLD
+
+  const setField = (name: keyof typeof formData, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }))
+    if (validationErrors[name]) setValidationErrors(prev => ({ ...prev, [name]: '' }))
+  }
 
   const validateForm = () => {
     const errors: Record<string, string> = {}
-
-    if (!formData.actualCostPaid) {
-      errors.actualCostPaid = 'Actual cost paid is required'
-    } else if (parseFloat(formData.actualCostPaid) <= 0) {
-      errors.actualCostPaid = 'Actual cost paid must be greater than 0'
-    }
-
-    if (!formData.paymentDate) {
-      errors.paymentDate = 'Payment date is required'
-    }
-
-    if (!formData.paymentMethod.trim()) {
-      errors.paymentMethod = 'Payment method is required'
-    }
-
-    // Payment reference is auto-generated, so no validation needed
-
+    if (!formData.actualCostPaid) errors.actualCostPaid = 'Amount paid is required'
+    else if (actual <= 0) errors.actualCostPaid = 'Amount must be greater than 0'
+    if (!formData.paymentDate) errors.paymentDate = 'Payment date is required'
     if (exceedsThreshold && !formData.paymentComment.trim()) {
-      errors.paymentComment = 'Comment is required when payment exceeds approved cost by more than 10%'
+      errors.paymentComment = 'Explain why the payment exceeds the approved cost by more than 10%'
     }
-
     setValidationErrors(errors)
     return Object.keys(errors).length === 0
-  }
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }))
-
-    // Clear validation error for this field
-    if (validationErrors[name]) {
-      setValidationErrors(prev => ({
-        ...prev,
-        [name]: '',
-      }))
-    }
-
-    // Check for variance warning
-    if (name === 'actualCostPaid' && value) {
-      const actual = parseFloat(value)
-      const var_pct = (actual - approvedCostNum) / approvedCostNum
-      setShowVarianceWarning(var_pct > varianceThreshold)
-    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,217 +63,143 @@ export function PaymentRecordingForm({
     if (!validateForm()) return
 
     setIsLoading(true)
-    setError(null)
-
     try {
       const response = await fetch(`/api/requisitions/${requisitionId}/record-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(getApiErrorMessage(data, 'Failed to record payment'))
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to record payment')
-      }
-
-      setSuccess(true)
-      setFormData({
-        actualCostPaid: '',
-        paymentDate: new Date().toISOString().split('T')[0],
-        paymentMethod: 'Bank Transfer',
-        paymentReference: '',
-        paymentComment: '',
-      })
-
-      setTimeout(() => {
-        onPaymentRecorded?.()
-      }, 1500)
+      toast.success('Payment recorded', { description: `${formatMoney(actual, currency)} · ${formData.paymentReference}` })
+      onPaymentRecorded?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      toast.error(err instanceof Error ? err.message : 'Failed to record payment')
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-      {error && (
-        <div className="flex items-center gap-2 p-4 bg-error-50 border border-error-200 rounded-xl">
-          <AlertCircle className="w-5 h-5 text-error-600 flex-shrink-0" />
-          <p className="text-sm text-error-700 font-medium">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="flex items-center gap-2 p-4 bg-success-50 border border-success-200 rounded-xl">
-          <CheckCircle className="w-5 h-5 text-success-600 flex-shrink-0" />
-          <p className="text-sm text-success-700 font-medium">Payment recorded successfully!</p>
-        </div>
-      )}
-
-      {/* Approved Cost Display */}
-      <div className="bg-brand-primary bg-opacity-5 border border-brand-primary border-opacity-20 rounded-xl p-4">
-        <p className="text-sm font-medium text-gray-700">Approved Cost</p>
-        <p className="text-2xl font-bold text-brand-primary mt-1">{formatCurrency(approvedCostNum)}</p>
-      </div>
-
-      {/* Actual Cost Paid */}
-      <div>
-        <label htmlFor="actualCostPaid" className="block text-sm font-medium text-gray-700 mb-1">
-          Actual Cost Paid *
-        </label>
-        <input
-          type="number"
-          id="actualCostPaid"
-          name="actualCostPaid"
-          value={formData.actualCostPaid}
-          onChange={handleInputChange}
-          step="0.01"
-          min="0"
-          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
-            validationErrors.actualCostPaid ? 'border-error-500' : 'border-gray-300'
-          }`}
-          placeholder="0.00"
-        />
-        {validationErrors.actualCostPaid && (
-          <p className="text-sm text-error-600 mt-1">{validationErrors.actualCostPaid}</p>
-        )}
-        {formData.actualCostPaid && (
-          <div className="mt-2 text-sm">
-            <p className="text-gray-600">
-              Variance: {variance > 0 ? '+' : ''}{(variance * 100).toFixed(2)}%
-            </p>
-            {showVarianceWarning && (
-              <p className="text-yellow-600 font-medium">
-                ⚠️ Payment exceeds approved cost by more than 10%. A comment is required.
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Wallet className="h-4 w-4" /> Record payment
+        </CardTitle>
+        <CardDescription>
+          Approved amount: <span className="font-semibold text-foreground tabular-nums">{formatMoney(approved, currency)}</span>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2" noValidate>
+          <div className="space-y-2">
+            <Label htmlFor="actualCostPaid">Amount paid</Label>
+            <Input
+              id="actualCostPaid"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={formData.actualCostPaid}
+              onChange={e => setField('actualCostPaid', e.target.value)}
+              placeholder={approved.toString()}
+              className="tabular-nums"
+              aria-invalid={!!validationErrors.actualCostPaid}
+            />
+            {actual > 0 && (
+              <p className={cn('text-xs tabular-nums', exceedsThreshold ? 'text-destructive' : 'text-muted-foreground')}>
+                Variance {variance > 0 ? '+' : ''}
+                {(variance * 100).toFixed(1)}% vs. approved
               </p>
             )}
+            <FieldError message={validationErrors.actualCostPaid} />
           </div>
-        )}
-      </div>
 
-      {/* Payment Date */}
-      <div>
-        <label htmlFor="paymentDate" className="block text-sm font-medium text-gray-700 mb-1">
-          Payment Date *
-        </label>
-        <input
-          type="date"
-          id="paymentDate"
-          name="paymentDate"
-          value={formData.paymentDate}
-          onChange={handleInputChange}
-          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
-            validationErrors.paymentDate ? 'border-error-500' : 'border-gray-300'
-          }`}
-        />
-        {validationErrors.paymentDate && (
-          <p className="text-sm text-error-600 mt-1">{validationErrors.paymentDate}</p>
-        )}
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="paymentDate">Payment date</Label>
+            <Input id="paymentDate" type="date" value={formData.paymentDate} onChange={e => setField('paymentDate', e.target.value)} aria-invalid={!!validationErrors.paymentDate} />
+            <FieldError message={validationErrors.paymentDate} />
+          </div>
 
-      {/* Payment Method */}
-      <div>
-        <label htmlFor="paymentMethod" className="block text-sm font-medium text-gray-700 mb-1">
-          Payment Method *
-        </label>
-        <select
-          id="paymentMethod"
-          name="paymentMethod"
-          value={formData.paymentMethod}
-          onChange={handleInputChange}
-          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
-            validationErrors.paymentMethod ? 'border-error-500' : 'border-gray-300'
-          }`}
-        >
-          <option value="Bank Transfer">Bank Transfer</option>
-          <option value="Check">Check</option>
-          <option value="Credit Card">Credit Card</option>
-          <option value="Internal Transfer">Internal Transfer</option>
-          <option value="Cash">Cash</option>
-          <option value="Other">Other</option>
-        </select>
-        {validationErrors.paymentMethod && (
-          <p className="text-sm text-error-600 mt-1">{validationErrors.paymentMethod}</p>
-        )}
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="paymentMethod">Method</Label>
+            <Select value={formData.paymentMethod} onValueChange={value => setField('paymentMethod', value)}>
+              <SelectTrigger id="paymentMethod">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {METHODS.map(method => (
+                  <SelectItem key={method} value={method}>
+                    {method}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      {/* Payment Reference */}
-      <div>
-        <label htmlFor="paymentReference" className="block text-sm font-medium text-gray-700 mb-1">
-          Payment Reference <span className="text-xs text-gray-500">(Auto-generated)</span>
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            id="paymentReference"
-            name="paymentReference"
-            value={formData.paymentReference}
-            onChange={handleInputChange}
-            readOnly
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const newRef = PaymentReferenceGenerator.generate()
-              setFormData(prev => ({ ...prev, paymentReference: newRef }))
-            }}
-            className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            title="Generate new reference"
-          >
-            <RefreshCw className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(formData.paymentReference)
-            }}
-            className="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            title="Copy reference"
-          >
-            <Copy className="w-4 h-4 text-gray-600" />
-          </button>
-        </div>
-        <p className="text-xs text-gray-500 mt-1">A unique payment reference is automatically generated for each payment</p>
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="paymentReference">Reference</Label>
+            <div className="flex gap-2">
+              <Input id="paymentReference" value={formData.paymentReference} readOnly className="bg-muted/50 font-mono text-xs" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="outline" size="icon" onClick={() => setField('paymentReference', PaymentReferenceGenerator.generate())} aria-label="Generate new reference">
+                    <RefreshCw />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Generate new reference</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(formData.paymentReference)
+                      toast.success('Reference copied')
+                    }}
+                    aria-label="Copy reference"
+                  >
+                    <Copy />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy reference</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
 
-      {/* Payment Comment */}
-      <div>
-        <label htmlFor="paymentComment" className="block text-sm font-medium text-gray-700 mb-1">
-          Comment {exceedsThreshold && '*'}
-        </label>
-        <textarea
-          id="paymentComment"
-          name="paymentComment"
-          value={formData.paymentComment}
-          onChange={handleInputChange}
-          rows={3}
-          className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary transition-all ${
-            validationErrors.paymentComment ? 'border-error-500' : 'border-gray-300'
-          }`}
-          placeholder={
-            exceedsThreshold
-              ? 'Required: Explain why payment exceeds approved cost'
-              : 'Optional: Add any notes about this payment'
-          }
-        />
-        {validationErrors.paymentComment && (
-          <p className="text-sm text-error-600 mt-1">{validationErrors.paymentComment}</p>
-        )}
-      </div>
+          {exceedsThreshold && (
+            <Alert variant="destructive" className="md:col-span-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>This payment exceeds the approved cost by more than 10%. A comment is required.</AlertDescription>
+            </Alert>
+          )}
 
-      {/* Submit Button */}
-      <div className="flex gap-4 pt-4">
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="px-6 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:opacity-90 active:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2"
-        >
-          {isLoading ? 'Recording Payment...' : 'Record Payment'}
-        </button>
-      </div>
-    </form>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="paymentComment">
+              Comment {!exceedsThreshold && <span className="font-normal text-muted-foreground">(optional)</span>}
+            </Label>
+            <Textarea
+              id="paymentComment"
+              rows={3}
+              value={formData.paymentComment}
+              onChange={e => setField('paymentComment', e.target.value)}
+              placeholder={exceedsThreshold ? 'Explain why the payment exceeds the approved cost' : 'Notes about this payment'}
+              aria-invalid={!!validationErrors.paymentComment}
+            />
+            <FieldError message={validationErrors.paymentComment} />
+          </div>
+
+          <div className="md:col-span-2">
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? <Loader2 className="animate-spin" /> : <Wallet />}
+              Record payment
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   )
 }

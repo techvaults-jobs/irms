@@ -1,262 +1,195 @@
-'use client'
-
-import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import Image from 'next/image'
-import { useState } from 'react'
+import {
+  ArrowRight,
+  BarChart3,
+  BellRing,
+  CheckCircle2,
+  Clock,
+  FilePlus2,
+  FileSearch,
+  Lock,
+  ShieldCheck,
+  UserPlus,
+  Wallet,
+  Workflow,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Logo } from '@/components/shared/logo'
+import { ThemeToggle } from '@/components/shared/theme-toggle'
 
-const FloatingLogo = ({ delay, direction }: { delay: number; direction: number }) => {
-  const [isHovered, setIsHovered] = useState(false)
-  const [showTooltip, setShowTooltip] = useState(false)
-  const [tooltipText, setTooltipText] = useState('')
+const FEATURES = [
+  { icon: Workflow, title: 'Rule-based approvals', text: 'Amount thresholds route each request through the right managers and finance approvers.' },
+  { icon: ShieldCheck, title: 'Immutable audit trail', text: 'Every edit, approval and payment is recorded and can never be altered.' },
+  { icon: Wallet, title: 'Payment tracking', text: 'Record payments against approved budgets and flag variances instantly.' },
+  { icon: BarChart3, title: 'Spending reports', text: 'Monthly, category and department breakdowns with one-click export.' },
+  { icon: BellRing, title: 'Real-time notifications', text: 'In-app, email and push alerts keep requesters and approvers in sync.' },
+  { icon: Lock, title: 'Role-based access', text: 'Staff, managers, finance and admins each see exactly what they need.' },
+]
 
-  // Creative messages for each direction
-  const messages = [
-    '✨ Streamline Your Workflow',
-    '🚀 Accelerate Approvals',
-    '📊 Track Everything',
-    '💼 Manage Requisitions',
-    '🎯 Stay Organized',
-    '⚡ Boost Efficiency',
-    '🔒 Secure & Reliable',
-    '🌟 Transform Your Process',
-  ]
+const STEPS = [
+  { icon: UserPlus, title: 'Request access', text: 'Staff sign up and an admin approves the account.' },
+  { icon: FilePlus2, title: 'Raise a requisition', text: 'Describe the need, cost and urgency, then attach quotes.' },
+  { icon: CheckCircle2, title: 'Get it approved', text: 'Approvers review, comment and sign off step by step.' },
+  { icon: Wallet, title: 'Pay & close', text: 'Finance records payment and the trail is complete.' },
+]
 
-  // Define different entry/exit paths for each direction
-  const paths = [
-    // Left to Right (top)
-    {
-      initial: { x: '-100vw', y: '10vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '110vw', y: '15vh', opacity: [0, 0.8, 1, 0.8, 0], rotate: 360, scale: [0.8, 1, 1.1, 1, 0.8] },
-    },
-    // Right to Left (middle-top)
-    {
-      initial: { x: '110vw', y: '20vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '-100vw', y: '25vh', opacity: [0, 0.9, 1, 0.9, 0], rotate: -360, scale: [0.8, 1.1, 1, 1, 0.8] },
-    },
-    // Top to Bottom (left side)
-    {
-      initial: { x: '15vw', y: '-100vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '20vw', y: '110vh', opacity: [0, 0.8, 1, 0.8, 0], rotate: 720, scale: [0.8, 1, 1.1, 1, 0.8] },
-    },
-    // Bottom to Top (right side)
-    {
-      initial: { x: '85vw', y: '110vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '80vw', y: '-100vh', opacity: [0, 0.9, 1, 0.9, 0], rotate: -720, scale: [0.8, 1.1, 1, 1, 0.8] },
-    },
-    // Diagonal: Top-Left to Bottom-Right
-    {
-      initial: { x: '-100vw', y: '-100vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '110vw', y: '110vh', opacity: [0, 0.8, 1, 0.8, 0], rotate: 540, scale: [0.8, 1, 1.1, 1, 0.8] },
-    },
-    // Diagonal: Top-Right to Bottom-Left
-    {
-      initial: { x: '110vw', y: '-100vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '-100vw', y: '110vh', opacity: [0, 0.9, 1, 0.9, 0], rotate: -540, scale: [0.8, 1.1, 1, 1, 0.8] },
-    },
-    // Curved path: Left to Right (wavy)
-    {
-      initial: { x: '-100vw', y: '50vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '110vw', y: '30vh', opacity: [0, 0.8, 1, 0.8, 0], rotate: 360, scale: [0.8, 1, 1.1, 1, 0.8] },
-    },
-    // Curved path: Right to Left (wavy)
-    {
-      initial: { x: '110vw', y: '60vh', opacity: 0, rotate: 0, scale: 0.8 },
-      animate: { x: '-100vw', y: '40vh', opacity: [0, 0.9, 1, 0.9, 0], rotate: -360, scale: [0.8, 1.1, 1, 1, 0.8] },
-    },
-  ]
-
-  const selectedPath = paths[direction % paths.length]
-
-  const handleHover = () => {
-    setIsHovered(true)
-    setTooltipText(messages[direction % messages.length])
-    setShowTooltip(true)
-  }
-
-  const handleHoverEnd = () => {
-    setIsHovered(false)
-    setTimeout(() => setShowTooltip(false), 300)
-  }
-
-  const handleClick = () => {
-    setTooltipText(messages[direction % messages.length])
-    setShowTooltip(true)
-    // Trigger a small animation burst
-    setTimeout(() => setShowTooltip(false), 2000)
-  }
-
-  return (
-    <motion.div
-      initial={selectedPath.initial}
-      animate={selectedPath.animate}
-      transition={{
-        duration: 20,
-        ease: 'linear',
-        delay,
-        repeat: Infinity,
-      }}
-      className="fixed will-change-transform pointer-events-auto z-0"
-      onMouseEnter={handleHover}
-      onMouseLeave={handleHoverEnd}
-      onClick={handleClick}
-    >
-      <motion.div
-        className="relative w-24 h-24 drop-shadow-2xl filter brightness-110 contrast-125 cursor-pointer"
-        animate={isHovered ? { scale: 1.3, rotate: 15 } : { scale: 1, rotate: 0 }}
-        transition={{ duration: 0.3 }}
-        whileHover={{ boxShadow: '0 0 30px rgba(220, 38, 38, 0.6)' }}
-      >
-        <Image
-          src="/logo-sm.png"
-          alt="Floating logo"
-          width={96}
-          height={96}
-          className="w-full h-full object-contain"
-          style={{
-            filter: 'drop-shadow(0 4px 12px rgba(220, 38, 38, 0.3)) brightness(1.2) contrast(1.1)',
-          }}
-        />
-      </motion.div>
-
-      {/* Tooltip */}
-      <AnimatePresence>
-        {showTooltip && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.8 }}
-            animate={{ opacity: 1, y: -60, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.8 }}
-            transition={{ duration: 0.3 }}
-            className="absolute left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-gradient-to-r from-red-600 to-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg pointer-events-none"
-          >
-            {tooltipText}
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-red-700"></div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Click ripple effect */}
-      <AnimatePresence>
-        {isHovered && (
-          <motion.div
-            initial={{ scale: 0, opacity: 0.8 }}
-            animate={{ scale: 2, opacity: 0 }}
-            exit={{ scale: 2, opacity: 0 }}
-            transition={{ duration: 0.6 }}
-            className="absolute inset-0 border-2 border-red-500 rounded-full pointer-events-none"
-          />
-        )}
-      </AnimatePresence>
-    </motion.div>
-  )
-}
+const PREVIEW_ROWS = [
+  { title: 'Laptops for design team', amount: '₦4.2M', status: 'Under Review', variant: 'warning' as const },
+  { title: 'Cloud hosting renewal', amount: '₦1.8M', status: 'Approved', variant: 'success' as const },
+  { title: 'Team offsite logistics', amount: '₦950K', status: 'Paid', variant: 'violet' as const },
+]
 
 export default function Home() {
-  const floatingLogos = [
-    { delay: 0, direction: 0 },
-    { delay: 2, direction: 1 },
-    { delay: 4, direction: 2 },
-    { delay: 6, direction: 3 },
-    { delay: 8, direction: 4 },
-    { delay: 10, direction: 5 },
-    { delay: 12, direction: 6 },
-    { delay: 14, direction: 7 },
-    { delay: 16, direction: 0 },
-    { delay: 18, direction: 1 },
-    { delay: 20, direction: 2 },
-    { delay: 22, direction: 3 },
-  ]
-
   return (
-    <main className="min-h-screen bg-brand-light flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Floating logos background - continuous stream */}
-      {floatingLogos.map((logo, idx) => (
-        <FloatingLogo key={idx} {...logo} />
-      ))}
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <Logo subtitle="by Techvaults" />
+          <nav className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="ghost" asChild className="hidden sm:inline-flex">
+              <Link href="/auth/register">Request access</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/auth/login">Sign in</Link>
+            </Button>
+          </nav>
+        </div>
+      </header>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
-        className="text-center max-w-md relative z-10"
-      >
-        {/* Animated Logo */}
-        <motion.div
-          animate={{ 
-            y: [0, -20, 0],
-            rotate: [0, 5, -5, 0]
-          }}
-          transition={{ 
-            duration: 4, 
-            repeat: Infinity,
-            ease: 'easeInOut'
-          }}
-          className="mb-8 flex justify-center"
-        >
-          <div className="relative w-32 h-32">
-            <Image
-              src="/logo.png"
-              alt="IRMS Logo"
-              width={128}
-              height={128}
-              className="w-full h-full object-contain drop-shadow-lg"
-              priority
-            />
+      <main>
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-grid [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]" />
+          <div className="absolute left-1/2 top-0 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
+          <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:py-28">
+            <div className="space-y-6">
+              <Badge variant="outline" className="gap-1.5 rounded-full px-3 py-1 font-normal">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Internal Requisition Management System
+              </Badge>
+              <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
+                Spend requests, <span className="text-primary">approved</span> without the chase.
+              </h1>
+              <p className="max-w-lg text-lg text-muted-foreground">
+                IRMS takes every requisition from request to payment with clear approvals, live status and a complete audit trail.
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button size="lg" asChild>
+                  <Link href="/auth/login">
+                    Sign in to IRMS <ArrowRight />
+                  </Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild>
+                  <Link href="/auth/register">
+                    <UserPlus /> Request an account
+                  </Link>
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">New staff accounts are reviewed by an administrator before access is granted.</p>
+            </div>
+
+            <Card className="relative shadow-2xl shadow-primary/10">
+              <CardContent className="space-y-5 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Dashboard preview</p>
+                    <p className="text-xs text-muted-foreground">Sample data</p>
+                  </div>
+                  <Badge variant="success" className="gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> On budget
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Pending', value: '12', icon: Clock },
+                    { label: 'Approved', value: '38', icon: CheckCircle2 },
+                    { label: 'Paid', value: '₦18.4M', icon: Wallet },
+                  ].map(stat => (
+                    <div key={stat.label} className="rounded-lg border bg-muted/30 p-3">
+                      <stat.icon className="mb-2 h-4 w-4 text-muted-foreground" />
+                      <p className="text-lg font-semibold tabular-nums">{stat.value}</p>
+                      <p className="text-xs text-muted-foreground">{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="divide-y rounded-lg border">
+                  {PREVIEW_ROWS.map(row => (
+                    <div key={row.title} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <FileSearch className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{row.title}</span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="tabular-nums text-muted-foreground">{row.amount}</span>
+                        <Badge variant={row.variant}>{row.status}</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </motion.div>
+        </section>
 
-        {/* Title */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="text-4xl font-bold text-brand-dark mb-4"
-        >
-          IRMS
-        </motion.h1>
+        <section className="border-t bg-muted/30">
+          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-3xl font-semibold tracking-tight">Everything a requisition needs</h2>
+              <p className="mt-3 text-muted-foreground">Built for Techvaults teams, from the first request to the final payment.</p>
+            </div>
+            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map(feature => (
+                <Card key={feature.title} className="bg-background">
+                  <CardContent className="space-y-3 p-6">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <feature.icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="font-semibold">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground">{feature.text}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
 
-        {/* Description */}
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-          className="text-lg text-brand-gray mb-8"
-        >
-          Internal Requisition Management System
-        </motion.p>
+        <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+          <h2 className="text-center text-3xl font-semibold tracking-tight">How it works</h2>
+          <ol className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((step, index) => (
+              <li key={step.title} className="relative space-y-3 rounded-xl border p-6">
+                <span className="absolute right-5 top-5 font-mono text-xs text-muted-foreground">0{index + 1}</span>
+                <step.icon className="h-6 w-6 text-primary" />
+                <h3 className="font-semibold">{step.title}</h3>
+                <p className="text-sm text-muted-foreground">{step.text}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-14 flex flex-col items-center gap-4 rounded-2xl bg-zinc-950 px-6 py-12 text-center text-white">
+            <h3 className="text-2xl font-semibold tracking-tight">Ready to get started?</h3>
+            <p className="max-w-md text-white/70">Sign in with your work account, or request access if you&apos;re new to the team.</p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button size="lg" asChild>
+                <Link href="/auth/login">Sign in</Link>
+              </Button>
+              <Button size="lg" variant="outline" asChild className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white">
+                <Link href="/auth/register">Request access</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      </main>
 
-        {/* CTA Button */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
-        >
-          <Link
-            href="/auth/login"
-            className="inline-block px-8 py-4 bg-brand-primary text-brand-light font-semibold rounded-lg hover:opacity-90 transition-all duration-200 shadow-lg hover:shadow-xl"
-          >
-            Get Started
-          </Link>
-        </motion.div>
-
-        {/* Footer Text */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8, duration: 0.5 }}
-          className="text-sm text-brand-gray mt-12"
-        >
-          Powered by{' '}
-          <Link
-            href="https://techvaults.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-brand-primary hover:opacity-80 transition-opacity"
-          >
-            Techvaults
-          </Link>
-        </motion.p>
-      </motion.div>
-    </main>
+      <footer className="border-t">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:px-6">
+          <span>© {new Date().getFullYear()} Techvaults</span>
+          <a href="https://techvaults.com/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
+            techvaults.com
+          </a>
+        </div>
+      </footer>
+    </div>
   )
 }

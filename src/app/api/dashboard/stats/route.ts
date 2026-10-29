@@ -36,6 +36,8 @@ export async function GET() {
       approvedCount,
       rejectedCount,
       paidCount,
+      underReviewCount,
+      closedCount,
     ] = await Promise.all([
       prisma.requisition.count({ where: whereClause }),
       prisma.requisition.count({ where: { ...whereClause, status: 'DRAFT' } }),
@@ -43,6 +45,8 @@ export async function GET() {
       prisma.requisition.count({ where: { ...whereClause, status: 'APPROVED' } }),
       prisma.requisition.count({ where: { ...whereClause, status: 'REJECTED' } }),
       prisma.requisition.count({ where: { ...whereClause, status: 'PAID' } }),
+      prisma.requisition.count({ where: { ...whereClause, status: 'UNDER_REVIEW' } }),
+      prisma.requisition.count({ where: { ...whereClause, status: 'CLOSED' } }),
     ])
 
     // Get financial totals
@@ -62,8 +66,9 @@ export async function GET() {
     // Get pending approvals count (for managers/finance)
     let pendingApprovalsCount = 0
     if (userRole === 'MANAGER' || userRole === 'FINANCE' || userRole === 'ADMIN') {
+      // Submitted requisitions move to UNDER_REVIEW once approval steps exist
       pendingApprovalsCount = await prisma.requisition.count({
-        where: { status: 'SUBMITTED' },
+        where: { ...whereClause, status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } },
       })
     }
 
@@ -74,6 +79,8 @@ export async function GET() {
       approvedCount,
       rejectedCount,
       paidCount,
+      underReviewCount,
+      closedCount,
       totalSpent,
       totalApproved,
       totalEstimated,
